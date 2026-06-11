@@ -1,0 +1,18 @@
+# Dependency directories
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Next.js build directories
+.next/
+out/
+build/
+dist/
+
+# Configuration and Database
+.env
+.mock_db/
+jwt_secret.txt
+*.log
