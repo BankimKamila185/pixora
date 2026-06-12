@@ -119,7 +119,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#e60023] hover:bg-[#ff1a40] text-white font-extrabold py-3 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 text-xs active:scale-97 disabled:opacity-40 disabled:cursor-not-allowed mt-2 cursor-pointer"
+              className="w-full bg-primary hover:bg-amber-400 text-zinc-950 font-black py-3 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 text-xs active:scale-97 disabled:opacity-40 disabled:cursor-not-allowed mt-2 cursor-pointer"
             >
               {loading ? "Logging in..." : "Log In"}
               {!loading && <ArrowRight className="w-4 h-4" />}

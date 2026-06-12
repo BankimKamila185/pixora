@@ -339,7 +339,7 @@ export default function DetailModal({ itemId, onClose, onNavigateToItem }: Detai
                 </div>
                 
                 <button onClick={handleSave} className="text-foreground hover:text-muted-foreground transition-colors">
-                  <Bookmark className={`w-6 h-6 ${saved ? "fill-[#e60023] text-[#e60023]" : ""}`} />
+                  <Bookmark className={`w-6 h-6 ${saved ? "fill-primary text-primary" : ""}`} />
                 </button>
               </div>
 

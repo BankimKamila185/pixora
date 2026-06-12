@@ -157,7 +157,7 @@ export default function OnboardingPage() {
         <button
           onClick={handleComplete}
           disabled={loading || selected.length === 0}
-          className="bg-[#e60023] hover:bg-[#ff1a40] disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold py-3.5 px-7 rounded-full transition-all flex items-center gap-1.5 shadow-md text-xs cursor-pointer"
+          className="bg-primary hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-black py-3.5 px-7 rounded-full transition-all flex items-center gap-1.5 shadow-md text-xs cursor-pointer"
         >
           {loading ? "Saving interests..." : "Start Exploring"}
           {!loading && <ArrowRight className="w-4 h-4" />}
