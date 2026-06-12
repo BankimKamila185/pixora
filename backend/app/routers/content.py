@@ -513,3 +513,40 @@ async def watch_content(
     await update_user_interest_profile(user_id)
     return {"message": "Watch history recorded"}
 
+
+@router.get("/api/content/image-proxy/{file_id}", dependencies=[Depends(check_rate_limit)])
+async def google_drive_image_proxy(file_id: str):
+    import httpx
+    from fastapi.responses import Response
+    from app.config import settings
+    from app.services.ingestion import get_google_access_token
+    
+    # Resolve authorization
+    access_token = await get_google_access_token()
+    headers = {}
+    params = {}
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    elif settings.GOOGLE_DRIVE_API_KEY:
+        params["key"] = settings.GOOGLE_DRIVE_API_KEY
+    else:
+        raise HTTPException(status_code=400, detail="Google Drive credentials not configured on backend")
+
+    # Fetch file content from Google Drive API
+    url = f"https://www.googleapis.com/drive/v3/files/{file_id}"
+    params["alt"] = "media"
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers, params=params, timeout=20.0, follow_redirects=True)
+            if response.status_code != 200:
+                logger.error(f"Image proxy failed for file {file_id}: {response.status_code} - {response.text}")
+                raise HTTPException(status_code=response.status_code, detail="Failed to fetch image from Google Drive")
+            
+            content_type = response.headers.get("content-type", "image/jpeg")
+            return Response(content=response.content, media_type=content_type)
+        except Exception as e:
+            logger.error(f"Image proxy request failed for file {file_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Image proxy error: {str(e)}")
+
+

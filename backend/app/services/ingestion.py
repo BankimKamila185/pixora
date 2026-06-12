@@ -214,7 +214,7 @@ async def ingest_google_drive_folder(
                 name = file.get("name", f"Drive Asset {f_id}")
                 title = os.path.splitext(name)[0].replace("-", " ").replace("_", " ").capitalize()
                 desc = file.get("description") or f"Google Drive asset '{name}' imported into the {category} catalog."
-                image_url = f"https://drive.google.com/uc?export=download&id={f_id}"
+                image_url = f"http://127.0.0.1:8000/api/content/image-proxy/{f_id}"
                 
                 items.append({
                     "_id": str(uuid.uuid4()),
@@ -529,7 +529,7 @@ async def ingest_google_drive_parent_folder(
                         name = file.get("name", f"Drive Asset {f_id}")
                         title = os.path.splitext(name)[0].replace("-", " ").replace("_", " ").capitalize()
                         desc = file.get("description") or f"Google Drive asset '{name}' imported into the {category_name} catalog."
-                        image_url = f"https://drive.google.com/uc?export=download&id={f_id}"
+                        image_url = f"http://127.0.0.1:8000/api/content/image-proxy/{f_id}"
                         
                         all_items.append({
                             "_id": str(uuid.uuid4()),
