@@ -514,7 +514,7 @@ async def watch_content(
     return {"message": "Watch history recorded"}
 
 
-@router.get("/api/content/image-proxy/{file_id}", dependencies=[Depends(check_rate_limit)])
+@router.get("/api/content/image-proxy/{file_id}")
 async def google_drive_image_proxy(file_id: str):
     import httpx
     from fastapi.responses import Response
