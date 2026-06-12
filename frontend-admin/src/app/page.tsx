@@ -49,7 +49,7 @@ export default function AdminDashboard() {
   // Google Drive Modal States
   const [showDriveModal, setShowDriveModal] = useState(false);
   const [driveImportType, setDriveImportType] = useState<"folder" | "file">("folder");
-  const [driveFolderId, setDriveFolderId] = useState("");
+  const [driveFolderId, setDriveFolderId] = useState("1KC3NJ4JzpmaBdgsDOJQXszfyqijL58kY");
   const [driveFileId, setDriveFileId] = useState("");
   const [driveApiKey, setDriveApiKey] = useState("");
   const [driveAccessToken, setDriveAccessToken] = useState("");
@@ -57,7 +57,7 @@ export default function AdminDashboard() {
   const [driveCount, setDriveCount] = useState(10);
   const [driveImporting, setDriveImporting] = useState(false);
   const [driveImportMessage, setDriveImportMessage] = useState("");
-  const [isParentFolder, setIsParentFolder] = useState(false);
+  const [isParentFolder, setIsParentFolder] = useState(true);
 
   useEffect(() => {
     setMounted(true);

@@ -4,7 +4,7 @@ import React, { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { 
   Search, User, Compass, TrendingUp, Info, Sparkles, RefreshCw, 
-  Home, MessageCircle, Heart, PlusSquare, Moon, Sun 
+  Home, MessageCircle, Heart, PlusSquare, Moon, Sun, X 
 } from "lucide-react";
 import { api, getAuthToken, removeAuthToken } from "@/utils/api";
 import ContentCard from "@/components/ContentCard";
@@ -32,6 +32,20 @@ function HomeFeedContent() {
   const [skip, setSkip] = useState(0);
   const LIMIT = 15;
   const [hasMore, setHasMore] = useState(true);
+
+  // Google Drive Modal States
+  const [showDriveModal, setShowDriveModal] = useState(false);
+  const [driveImportType, setDriveImportType] = useState<"folder" | "file">("folder");
+  const [driveFolderId, setDriveFolderId] = useState("1KC3NJ4JzpmaBdgsDOJQXszfyqijL58kY");
+  const [driveFileId, setDriveFileId] = useState("");
+  const [driveApiKey, setDriveApiKey] = useState("");
+  const [driveAccessToken, setDriveAccessToken] = useState("");
+  const [driveCategory, setDriveCategory] = useState("Nature");
+  const [driveCount, setDriveCount] = useState(10);
+  const [driveImporting, setDriveImporting] = useState(false);
+  const [driveImportMessage, setDriveImportMessage] = useState("");
+  const [isParentFolder, setIsParentFolder] = useState(true);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Load user status, categories, theme and initial feed
   useEffect(() => {
@@ -104,7 +118,7 @@ function HomeFeedContent() {
     }
     
     fetchFeed();
-  }, [selectedCategory, searchQuery, isTrending, searchParams]);
+  }, [selectedCategory, searchQuery, isTrending, searchParams, refreshTrigger]);
 
   // Load more pagination
   const handleLoadMore = async () => {
@@ -151,6 +165,51 @@ function HomeFeedContent() {
     setSearchQuery("");
     setIsTrending(false);
     router.push("/");
+  };
+
+  const handleDriveImportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDriveImporting(true);
+    setDriveImportMessage("");
+    try {
+      const payload: any = {
+        api_key: driveApiKey || undefined,
+        access_token: driveAccessToken || undefined,
+      };
+
+      if (driveImportType === "folder") {
+        if (!driveFolderId.trim()) {
+          throw new Error("Folder ID is required");
+        }
+        payload.folder_id = driveFolderId.trim();
+        payload.count = driveCount;
+        payload.is_parent_folder = isParentFolder;
+        if (!isParentFolder) {
+          payload.category = driveCategory;
+        }
+      } else {
+        if (!driveFileId.trim()) {
+          throw new Error("File ID is required");
+        }
+        payload.file_id = driveFileId.trim();
+        payload.category = driveCategory;
+      }
+
+      const results = await api.importFromDrive(payload);
+      
+      const updatedCats = await api.getCategories();
+      setCategories(updatedCats);
+
+      setDriveImportMessage(`Successfully imported ${results.length} items from Google Drive!`);
+      setRefreshTrigger(prev => prev + 1);
+      setTimeout(() => {
+        setShowDriveModal(false);
+      }, 1500);
+    } catch (err: any) {
+      setDriveImportMessage(err.message || "Failed to import from Google Drive.");
+    } finally {
+      setDriveImporting(false);
+    }
   };
 
   const handleCategorySelect = (cat: string) => {
@@ -234,7 +293,7 @@ function HomeFeedContent() {
             </button>
 
             <button
-              onClick={() => showToast("Creation tool coming soon!")}
+              onClick={() => setShowDriveModal(true)}
               className="w-full flex items-center gap-4 py-3 px-3.5 rounded-xl text-sm font-bold text-muted-foreground hover:bg-secondary/40 hover:text-foreground transition-all"
             >
               <PlusSquare className="w-5 h-5" />
@@ -510,7 +569,7 @@ function HomeFeedContent() {
         
         {/* Central Add Button */}
         <button 
-          onClick={() => showToast("Creation tool coming soon!")} 
+          onClick={() => setShowDriveModal(true)} 
           className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-lg active:scale-90 transition-all cursor-pointer"
         >
           <PlusSquare className="w-5.5 h-5.5" />
@@ -563,6 +622,195 @@ function HomeFeedContent() {
           }}
           onNavigateToItem={(id) => setSelectedItemId(id)}
         />
+      )}
+
+      {/* --- GOOGLE DRIVE IMPORT DIALOG --- */}
+      {showDriveModal && (
+        <div className="fixed inset-0 bg-black/75 z-50 overflow-y-auto flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-zinc-950 border border-zinc-900 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl relative text-zinc-300">
+            {/* Header */}
+            <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-zinc-950">
+              <h3 className="font-bold text-sm uppercase tracking-wider text-primary flex items-center gap-1.5">
+                <RefreshCw className="w-4 h-4 text-primary animate-spin" />
+                Google Drive Ingestion
+              </h3>
+              <button 
+                onClick={() => setShowDriveModal(false)}
+                className="p-1.5 rounded-full hover:bg-zinc-900 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+              >
+                <X className="w-4.5 h-4.5" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleDriveImportSubmit} className="p-6 space-y-4">
+              {driveImportMessage && (
+                <div className={`p-3 rounded-lg text-xs font-semibold ${
+                  driveImportMessage.includes("Successfully") 
+                    ? "bg-amber-950/40 border border-amber-900/50 text-primary" 
+                    : "bg-rose-950/40 border border-rose-900/50 text-rose-400"
+                }`}>
+                  {driveImportMessage}
+                </div>
+              )}
+
+              {/* Import Type Tabs */}
+              <div className="grid grid-cols-2 gap-2 bg-zinc-900/50 p-1 rounded-xl border border-zinc-900">
+                <button
+                  type="button"
+                  onClick={() => setDriveImportType("folder")}
+                  className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    driveImportType === "folder" 
+                      ? "bg-zinc-800 text-primary shadow-sm" 
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  Folder Import
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDriveImportType("file")}
+                  className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    driveImportType === "file" 
+                      ? "bg-zinc-800 text-primary shadow-sm" 
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  Catalog File (CSV/JSON)
+                </button>
+              </div>
+
+              {driveImportType === "folder" ? (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Google Drive Folder ID</label>
+                  <input
+                    type="text"
+                    required
+                    value={driveFolderId}
+                    onChange={(e) => setDriveFolderId(e.target.value)}
+                    placeholder="e.g., 1A2b3C4d5E6f_..."
+                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500/50 placeholder-zinc-700 text-zinc-300"
+                  />
+                  <p className="text-[9px] text-zinc-600">Reads all images contained within the specified Google Drive folder.</p>
+                  
+                  {/* Parent Ingestion Checkbox */}
+                  <div className="flex items-center gap-2 pt-2 select-none">
+                    <input
+                      type="checkbox"
+                      id="is-parent-folder"
+                      checked={isParentFolder}
+                      onChange={(e) => setIsParentFolder(e.target.checked)}
+                      className="w-3.5 h-3.5 accent-amber-500 bg-zinc-900 rounded border-zinc-900 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                    />
+                    <label htmlFor="is-parent-folder" className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 cursor-pointer">
+                      Contains Category Subfolders (Parent Ingestion)
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Google Drive File ID / Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={driveFileId}
+                    onChange={(e) => setDriveFileId(e.target.value)}
+                    placeholder="e.g., catalog_data.csv, 1g2h3i4j_..."
+                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500/50 placeholder-zinc-700 text-zinc-300"
+                  />
+                  <p className="text-[9px] text-zinc-600">Downloads a CSV or JSON catalog and parses row fields.</p>
+                </div>
+              )}
+
+              {/* Target Feed Category */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Target Feed Category</label>
+                  <select
+                    disabled={driveImportType === "folder" && isParentFolder}
+                    value={driveCategory}
+                    onChange={(e) => setDriveCategory(e.target.value)}
+                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500/50 text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {categories.map(cat => (
+                      <option key={cat} value={cat} className="bg-zinc-950">{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                    {driveImportType === "folder" ? "Max Folder Items" : "File Settings"}
+                  </label>
+                  <select
+                    disabled={driveImportType !== "folder"}
+                    value={driveCount}
+                    onChange={(e) => setDriveCount(Number(e.target.value))}
+                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500/50 text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <option value="5" className="bg-zinc-950">5 items</option>
+                    <option value="10" className="bg-zinc-950">10 items</option>
+                    <option value="15" className="bg-zinc-950">15 items</option>
+                    <option value="20" className="bg-zinc-950">20 items</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Credentials Header */}
+              <div className="border-t border-zinc-900 pt-3 mt-1">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 block mb-2">Google Cloud Authentication (Optional)</span>
+                
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 flex justify-between">
+                      <span>Google API Key</span>
+                      <span className="text-zinc-600 font-normal normal-case">For public files/folders</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={driveApiKey}
+                      onChange={(e) => setDriveApiKey(e.target.value)}
+                      placeholder="AIzaSy..."
+                      className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500/50 placeholder-zinc-800 text-zinc-300"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 flex justify-between">
+                      <span>OAuth2 Access Token</span>
+                      <span className="text-zinc-600 font-normal normal-case">For private content</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={driveAccessToken}
+                      onChange={(e) => setDriveAccessToken(e.target.value)}
+                      placeholder="ya29.a0AfH6SM..."
+                      className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500/50 placeholder-zinc-800 text-zinc-300"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex gap-3 pt-3 border-t border-zinc-900">
+                <button
+                  type="button"
+                  onClick={() => setShowDriveModal(false)}
+                  className="flex-1 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-zinc-200 border border-zinc-850 text-xs font-bold py-3.5 rounded-xl transition-all cursor-pointer text-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={driveImporting || (driveImportType === "folder" ? !driveFolderId.trim() : !driveFileId.trim())}
+                  className="flex-1 bg-primary hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-black text-xs py-3.5 rounded-xl transition-all cursor-pointer text-center"
+                >
+                  {driveImporting ? "Processing..." : "Ingest from Google Drive"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

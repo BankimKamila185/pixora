@@ -140,4 +140,19 @@ export const api = {
   async getProfile() {
     return apiFetch("/api/users/profile");
   },
+
+  // Google Ingestion & Drive Integration (Admin proxy allowed for mockup demo)
+  async importFromDrive(data: any) {
+    return apiFetch("/api/admin/drive/import", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async ingestContent(data: any) {
+    return apiFetch("/api/admin/ingest", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };
