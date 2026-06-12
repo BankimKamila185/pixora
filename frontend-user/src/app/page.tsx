@@ -6,7 +6,7 @@ import {
   Search, User, Compass, TrendingUp, Info, Sparkles, RefreshCw, 
   Home, MessageCircle, Heart, PlusSquare, Moon, Sun 
 } from "lucide-react";
-import { api, getAuthToken } from "@/utils/api";
+import { api, getAuthToken, removeAuthToken } from "@/utils/api";
 import ContentCard from "@/components/ContentCard";
 import DetailModal from "@/components/DetailModal";
 
@@ -61,6 +61,8 @@ function HomeFeedContent() {
             setUser(me);
           } catch (e) {
             console.error("Token expired or invalid", e);
+            removeAuthToken();
+            setIsLoggedIn(false);
           }
         }
       } catch (err) {
@@ -503,7 +505,7 @@ function HomeFeedContent() {
             isTrending ? "text-primary" : "text-muted-foreground"
           }`}
         >
-          <Search className="w-5.5 h-5.5" />
+          <Compass className="w-5.5 h-5.5" />
         </button>
         
         {/* Central Add Button */}

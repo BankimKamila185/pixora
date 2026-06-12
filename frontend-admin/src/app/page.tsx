@@ -57,6 +57,7 @@ export default function AdminDashboard() {
   const [driveCount, setDriveCount] = useState(10);
   const [driveImporting, setDriveImporting] = useState(false);
   const [driveImportMessage, setDriveImportMessage] = useState("");
+  const [isParentFolder, setIsParentFolder] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -281,7 +282,6 @@ export default function AdminDashboard() {
     setDriveImportMessage("");
     try {
       const payload: any = {
-        category: driveCategory,
         api_key: driveApiKey || undefined,
         access_token: driveAccessToken || undefined,
       };
@@ -292,11 +292,16 @@ export default function AdminDashboard() {
         }
         payload.folder_id = driveFolderId.trim();
         payload.count = driveCount;
+        payload.is_parent_folder = isParentFolder;
+        if (!isParentFolder) {
+          payload.category = driveCategory;
+        }
       } else {
         if (!driveFileId.trim()) {
           throw new Error("File ID is required");
         }
         payload.file_id = driveFileId.trim();
+        payload.category = driveCategory;
       }
 
       const results = await adminApi.importFromDrive(payload);
@@ -1219,6 +1224,20 @@ export default function AdminDashboard() {
                     className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-500/50 placeholder-zinc-700 text-zinc-300"
                   />
                   <p className="text-[9px] text-zinc-600">Reads all images contained within the specified Google Drive folder.</p>
+                  
+                  {/* Parent Ingestion Checkbox */}
+                  <div className="flex items-center gap-2 pt-2 select-none">
+                    <input
+                      type="checkbox"
+                      id="is-parent-folder"
+                      checked={isParentFolder}
+                      onChange={(e) => setIsParentFolder(e.target.checked)}
+                      className="w-3.5 h-3.5 accent-teal-400 bg-zinc-900 rounded border-zinc-900 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                    />
+                    <label htmlFor="is-parent-folder" className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 cursor-pointer">
+                      Contains Category Subfolders (Parent Ingestion)
+                    </label>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -1240,9 +1259,10 @@ export default function AdminDashboard() {
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Target Feed Category</label>
                   <select
+                    disabled={driveImportType === "folder" && isParentFolder}
                     value={driveCategory}
                     onChange={(e) => setDriveCategory(e.target.value)}
-                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-500/50 text-zinc-300"
+                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-500/50 text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {categories.map(cat => (
                       <option key={cat} value={cat} className="bg-zinc-950">{cat}</option>

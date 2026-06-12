@@ -33,7 +33,8 @@ class IngestionRequest(BaseModel):
 class DriveImportRequest(BaseModel):
     folder_id: Optional[str] = Field(None, description="Google Drive Folder ID")
     file_id: Optional[str] = Field(None, description="Google Drive File ID")
-    category: str = Field(..., description="Target category for imported items")
+    category: Optional[str] = Field(None, description="Target category for imported items")
+    is_parent_folder: bool = Field(False, description="Whether the folder is a parent folder containing category subfolders")
     api_key: Optional[str] = Field(None, description="Google Drive API Key")
     access_token: Optional[str] = Field(None, description="Google OAuth2 Access Token")
     count: int = Field(10, ge=1, le=50, description="Max folder items to ingest")
@@ -450,22 +451,34 @@ async def ingest_content(req: IngestionRequest):
 
 @router.post("/drive/import", response_model=List[ContentOut], dependencies=[Depends(check_rate_limit)])
 async def import_google_drive(req: DriveImportRequest):
-    if req.category not in VALID_CATEGORIES:
-        raise HTTPException(status_code=400, detail="Invalid target category")
+    if not req.is_parent_folder:
+        if not req.category:
+            raise HTTPException(status_code=400, detail="Target category is required for single folder or file imports")
+        if req.category not in VALID_CATEGORIES:
+            raise HTTPException(status_code=400, detail="Invalid target category")
         
     if not req.folder_id and not req.file_id:
         raise HTTPException(status_code=400, detail="Either folder_id or file_id must be provided")
 
     items = []
     if req.folder_id:
-        from app.services.ingestion import ingest_google_drive_folder
-        items = await ingest_google_drive_folder(
-            folder_id=req.folder_id,
-            category=req.category,
-            count=req.count,
-            api_key=req.api_key,
-            access_token=req.access_token
-        )
+        if req.is_parent_folder:
+            from app.services.ingestion import ingest_google_drive_parent_folder
+            items = await ingest_google_drive_parent_folder(
+                parent_folder_id=req.folder_id,
+                count=req.count,
+                api_key=req.api_key,
+                access_token=req.access_token
+            )
+        else:
+            from app.services.ingestion import ingest_google_drive_folder
+            items = await ingest_google_drive_folder(
+                folder_id=req.folder_id,
+                category=req.category,
+                count=req.count,
+                api_key=req.api_key,
+                access_token=req.access_token
+            )
     elif req.file_id:
         from app.services.ingestion import ingest_google_drive_file
         items = await ingest_google_drive_file(
@@ -487,7 +500,7 @@ async def import_google_drive(req: DriveImportRequest):
             await content_col.insert_one(item)
             inserted_count += 1
             
-    logger.info(f"Imported {inserted_count} new items from Google Drive into category {req.category}")
+    logger.info(f"Imported {inserted_count} new items from Google Drive (parent={req.is_parent_folder})")
 
     # Format return list
     formatted_items = []

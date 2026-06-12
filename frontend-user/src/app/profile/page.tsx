@@ -57,6 +57,8 @@ export default function ProfilePage() {
         setProfile(data);
       } catch (err) {
         console.error("Failed to load profile", err);
+        removeAuthToken();
+        router.push("/login");
       } finally {
         setLoading(false);
       }
@@ -485,41 +487,44 @@ export default function ProfilePage() {
         </main>
       </div>
 
-      {/* 4. Mobile Bottom Navigation Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 h-16 border-t border-border/60 bg-background/95 backdrop-blur-md flex items-center justify-around z-40 lg:hidden px-2 shadow-inner">
+      {/* 4. Mobile Bottom Navigation Bar (Floating Mockup Style) */}
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 w-[90%] max-w-md h-16 rounded-full border border-white/10 bg-zinc-950/80 backdrop-blur-xl flex items-center justify-around z-40 lg:hidden px-4 shadow-2xl">
         <button 
           onClick={() => router.push("/")} 
-          className="p-2.5 rounded-full text-muted-foreground"
+          className="p-2 rounded-full text-muted-foreground transition-colors cursor-pointer"
         >
           <Home className="w-5.5 h-5.5" />
         </button>
         <button 
           onClick={() => router.push("/?trending=true")}
-          className="p-2.5 rounded-full text-muted-foreground"
+          className="p-2 rounded-full text-muted-foreground transition-colors cursor-pointer"
         >
           <Compass className="w-5.5 h-5.5" />
         </button>
+        
+        {/* Central Add Button */}
         <button 
           onClick={() => showToast("Creation tool coming soon!")} 
-          className="p-2.5 rounded-full text-muted-foreground"
+          className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-lg active:scale-90 transition-all cursor-pointer"
         >
           <PlusSquare className="w-5.5 h-5.5" />
         </button>
+        
         <button 
           onClick={() => showToast("No new notifications")} 
-          className="p-2.5 rounded-full text-muted-foreground"
+          className="p-2 rounded-full text-muted-foreground cursor-pointer"
         >
           <Heart className="w-5.5 h-5.5" />
         </button>
         <button 
           onClick={() => {}} 
-          className="p-1.5 rounded-full border-2 border-primary"
+          className="p-0.5 rounded-full border border-primary cursor-pointer"
         >
           <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-white text-[9px] font-bold">
             {user.name.charAt(0).toUpperCase()}
           </div>
         </button>
-      </nav>
+      </div>
 
       {/* 5. Custom notification toast overlay */}
       {toastMessage && (

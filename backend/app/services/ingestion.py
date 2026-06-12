@@ -2,7 +2,7 @@ import logging
 import uuid
 import httpx
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from app.config import settings
 from app.database import get_collection
 from app.services.recommendation import VALID_CATEGORIES
@@ -176,7 +176,10 @@ async def ingest_google_drive_folder(
     Direct download link: https://drive.google.com/uc?export=download&id={file_id}
     """
     if not api_key and not access_token:
-        if settings.GOOGLE_DRIVE_API_KEY:
+        refreshed_token = await get_google_access_token()
+        if refreshed_token:
+            access_token = refreshed_token
+        elif settings.GOOGLE_DRIVE_API_KEY:
             api_key = settings.GOOGLE_DRIVE_API_KEY
         else:
             logger.info("Google Drive credentials not provided. Simulating folder import...")
@@ -244,7 +247,10 @@ async def ingest_google_drive_file(
     CSV schema expects columns: title, description, image_url, [tags]
     """
     if not api_key and not access_token:
-        if settings.GOOGLE_DRIVE_API_KEY:
+        refreshed_token = await get_google_access_token()
+        if refreshed_token:
+            access_token = refreshed_token
+        elif settings.GOOGLE_DRIVE_API_KEY:
             api_key = settings.GOOGLE_DRIVE_API_KEY
         else:
             logger.info("Google Drive credentials not provided. Simulating file import...")
@@ -408,4 +414,154 @@ def get_mock_drive_file_catalog(file_id: str, category: str) -> List[Dict[str, A
             "shares": 0,
             "created_at": datetime.utcnow()
         })
+    return items
+
+
+async def get_google_access_token() -> Optional[str]:
+    """Retrieves a fresh access token using the configured refresh token."""
+    if not settings.GOOGLE_REFRESH_TOKEN or not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
+        return None
+    
+    url = "https://oauth2.googleapis.com/token"
+    payload = {
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "client_secret": settings.GOOGLE_CLIENT_SECRET,
+        "refresh_token": settings.GOOGLE_REFRESH_TOKEN,
+        "grant_type": "refresh_token"
+    }
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, data=payload, timeout=10.0)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("access_token")
+            else:
+                logger.error(f"Failed to refresh Google OAuth token: {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.error(f"Error refreshing Google OAuth token: {e}")
+    return None
+
+
+async def ingest_google_drive_parent_folder(
+    parent_folder_id: str,
+    count: int = 10,
+    api_key: str = None,
+    access_token: str = None
+) -> List[Dict[str, Any]]:
+    """
+    Lists subfolders of parent_folder_id.
+    Each subfolder's name is treated as the category.
+    Images inside each subfolder are ingested under that category.
+    """
+    if not api_key and not access_token:
+        refreshed_token = await get_google_access_token()
+        if refreshed_token:
+            access_token = refreshed_token
+        elif settings.GOOGLE_DRIVE_API_KEY:
+            api_key = settings.GOOGLE_DRIVE_API_KEY
+        else:
+            logger.info("Google Drive credentials not provided. Simulating parent folder import...")
+            return get_mock_drive_parent_folder_images(parent_folder_id, count)
+
+    url = "https://www.googleapis.com/drive/v3/files"
+    q_str = f"'{parent_folder_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+    params = {
+        "q": q_str,
+        "pageSize": 50,
+        "fields": "files(id, name)",
+    }
+    headers = {}
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    elif api_key:
+        params["key"] = api_key
+
+    all_items = []
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers, params=params, timeout=12.0)
+            if response.status_code != 200:
+                logger.error(f"Google Drive parent folder list error: {response.status_code} - {response.text}")
+                return get_mock_drive_parent_folder_images(parent_folder_id, count)
+
+            data = response.json()
+            subfolders = data.get("files", [])
+            
+            if not subfolders:
+                logger.warning(f"No subfolders found in parent folder {parent_folder_id}")
+                return get_mock_drive_parent_folder_images(parent_folder_id, count)
+
+            for subfolder in subfolders:
+                subfolder_id = subfolder.get("id")
+                raw_name = subfolder.get("name", "")
+                
+                # Normalize subfolder name to use as category
+                category_name = raw_name.strip().capitalize()
+                if not category_name:
+                    continue
+                
+                # Ensure the category is dynamically added to VALID_CATEGORIES if not present
+                if category_name not in VALID_CATEGORIES:
+                    VALID_CATEGORIES.append(category_name)
+                    logger.info(f"Dynamically registered new category: {category_name}")
+                
+                # List files in this subfolder
+                sub_q = f"'{subfolder_id}' in parents and mimeType contains 'image/' and trashed = false"
+                sub_params = {
+                    "q": sub_q,
+                    "pageSize": count,
+                    "fields": "files(id, name, description)",
+                }
+                if api_key and not access_token:
+                    sub_params["key"] = api_key
+                
+                sub_res = await client.get(url, headers=headers, params=sub_params, timeout=12.0)
+                if sub_res.status_code == 200:
+                    sub_data = sub_res.json()
+                    files = sub_data.get("files", [])
+                    for file in files:
+                        f_id = file.get("id")
+                        name = file.get("name", f"Drive Asset {f_id}")
+                        title = os.path.splitext(name)[0].replace("-", " ").replace("_", " ").capitalize()
+                        desc = file.get("description") or f"Google Drive asset '{name}' imported into the {category_name} catalog."
+                        image_url = f"https://drive.google.com/uc?export=download&id={f_id}"
+                        
+                        all_items.append({
+                            "_id": str(uuid.uuid4()),
+                            "title": title[:100],
+                            "description": desc,
+                            "image_url": image_url,
+                            "category": category_name,
+                            "source": "Google Drive",
+                            "tags": ["gdrive", "multi-category", category_name.lower()],
+                            "likes": 0,
+                            "saves": 0,
+                            "views": 0,
+                            "shares": 0,
+                            "created_at": datetime.utcnow()
+                        })
+                else:
+                    logger.error(f"Failed to list images inside subfolder {raw_name}: {sub_res.text}")
+                    mock_items = get_mock_drive_folder_images(subfolder_id, category_name, count)
+                    all_items.extend(mock_items)
+
+            return all_items
+        except Exception as e:
+            logger.error(f"Google Drive parent folder processing failed: {e}")
+            return get_mock_drive_parent_folder_images(parent_folder_id, count)
+
+
+def get_mock_drive_parent_folder_images(parent_folder_id: str, count: int) -> List[Dict[str, Any]]:
+    # Simulates subfolders: "Nature", "Technology", "Design", "Travel"
+    mock_categories = ["Nature", "Technology", "Design", "Travel"]
+    items = []
+    
+    for cat in mock_categories:
+        if cat not in VALID_CATEGORIES:
+            VALID_CATEGORIES.append(cat)
+            
+        sub_items = get_mock_drive_folder_images(f"mock-subfolder-{cat.lower()}", cat, count)
+        items.extend(sub_items)
+        
     return items

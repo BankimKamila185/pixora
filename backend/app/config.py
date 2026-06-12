@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     UNSPLASH_ACCESS_KEY: str = ""
     PEXELS_API_KEY: str = ""
     GOOGLE_DRIVE_API_KEY: str = ""
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REFRESH_TOKEN: str = ""
 
     class Config:
         env_file = ".env"
