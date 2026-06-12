@@ -310,16 +310,16 @@ function HomeFeedContent() {
       </header>
 
       {/* 3. Main Workspace Area */}
-      <div className="flex-1 lg:pl-64 min-h-screen flex flex-col pb-24 lg:pb-8">
+      <div className="flex-1 lg:pl-64 min-h-screen flex flex-col pb-28 lg:pb-8">
         
         {/* Dynamic Guest Banner */}
         {!isLoggedIn && (
-          <div className="bg-[#e60023] text-white py-3 px-6 text-center text-xs sm:text-sm font-black flex items-center justify-center gap-2 relative z-30 shadow-md">
+          <div className="bg-primary text-primary-foreground py-3 px-6 text-center text-xs sm:text-sm font-black flex items-center justify-center gap-2 relative z-30 shadow-md">
             <Sparkles className="w-4 h-4 animate-bounce" />
-            <span>Sign up to customize recommendations according to your unique taste!</span>
+            <span>Sign up to customize recommendations according to your taste!</span>
             <button 
               onClick={() => router.push("/login")}
-              className="ml-3 bg-white text-[#e60023] px-3.5 py-1.5 rounded-full text-[10px] font-black shadow hover:bg-zinc-100 transition-all active:scale-95 cursor-pointer"
+              className="ml-3 bg-white text-zinc-950 px-3.5 py-1.5 rounded-full text-[10px] font-black shadow hover:bg-zinc-100 transition-all active:scale-95 cursor-pointer"
             >
               Sign In
             </button>
@@ -329,35 +329,76 @@ function HomeFeedContent() {
         {/* Feed Content Area */}
         <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 mt-6 flex-1">
           
-          {/* Categories Selector Carousel */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-4 pt-1 no-scrollbar border-b border-border/40 mb-6 select-none">
+          {/* Discover Header */}
+          <div className="flex justify-between items-end mb-6">
+            <div className="space-y-0.5">
+              <h1 className="text-3xl font-black tracking-tight text-foreground">Discover</h1>
+              <p className="text-xs text-muted-foreground">Find your favorite content</p>
+            </div>
+            
             <button
               onClick={() => {
-                setSelectedCategory("");
-                setIsTrending(false);
+                const searchEl = document.getElementById("desktop-search-input");
+                if (searchEl) {
+                  searchEl.focus();
+                  searchEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
               }}
-              className={`flex-none px-4.5 py-2 rounded-full text-xs font-bold transition-all ${
-                !selectedCategory && !isTrending
-                  ? "bg-foreground text-background"
-                  : "bg-secondary text-muted-foreground hover:text-foreground"
-              }`}
+              className="w-10 h-10 rounded-full bg-secondary border border-border/40 flex items-center justify-center text-foreground hover:bg-secondary/80 active:scale-95 transition-all cursor-pointer"
             >
-              All Topics
+              <Search className="w-4 h-4" />
             </button>
-            
-            {categories.map((cat) => (
+          </div>
+
+          {/* Stories Categories Selector Carousel */}
+          <div className="flex items-center gap-4 overflow-x-auto pb-6 pt-2 no-scrollbar select-none border-b border-border/40 mb-6">
+            {/* Add Story Button (All Topics) */}
+            <div className="flex flex-col items-center gap-1.5 flex-none">
               <button
-                key={cat}
-                onClick={() => handleCategorySelect(cat)}
-                className={`flex-none px-4.5 py-2 rounded-full text-xs font-bold transition-all ${
-                  selectedCategory === cat
-                    ? "bg-primary text-white"
-                    : "bg-secondary text-muted-foreground hover:text-foreground"
+                onClick={handleResetFeed}
+                className={`w-16 h-16 rounded-full border flex items-center justify-center transition-all active:scale-95 cursor-pointer ${
+                  !selectedCategory && !isTrending
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-secondary text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {cat}
+                <PlusSquare className="w-6 h-6" />
               </button>
-            ))}
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                !selectedCategory && !isTrending ? "text-primary font-black" : "text-muted-foreground"
+              }`}>
+                All
+              </span>
+            </div>
+
+            {/* Category Circles */}
+            {categories.map((cat) => {
+              const isSelected = selectedCategory === cat;
+              const label = cat.split(' ')[0];
+              const initials = cat.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+              
+              return (
+                <div key={cat} className="flex flex-col items-center gap-1.5 flex-none">
+                  <button
+                    onClick={() => handleCategorySelect(cat)}
+                    className={`w-16 h-16 rounded-full p-[2.5px] transition-all active:scale-95 cursor-pointer ${
+                      isSelected
+                        ? "bg-gradient-to-tr from-amber-400 via-yellow-500 to-amber-600 ring-2 ring-primary/20"
+                        : "bg-secondary hover:bg-secondary/80"
+                    }`}
+                  >
+                    <div className="w-full h-full rounded-full bg-zinc-950 flex items-center justify-center text-xs font-black text-white">
+                      {initials}
+                    </div>
+                  </button>
+                  <span className={`text-[10px] font-bold uppercase tracking-wide ${
+                    isSelected ? "text-primary font-black" : "text-muted-foreground"
+                  }`}>
+                    {label}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
           {/* Desktop Search Row */}
@@ -387,7 +428,7 @@ function HomeFeedContent() {
                   : selectedCategory
                   ? `${selectedCategory} Collection`
                   : isLoggedIn
-                  ? "Personalized Feed for You"
+                  ? "Recommended For You"
                   : "Discover Visual Ideas"}
               </h2>
               {isLoggedIn && !selectedCategory && !searchQuery && !isTrending && (
@@ -424,7 +465,7 @@ function HomeFeedContent() {
                 <div className="flex justify-center mt-14">
                   <button
                     onClick={handleLoadMore}
-                    className="flex items-center gap-2 px-6 py-4 bg-secondary hover:bg-secondary/70 text-foreground text-xs font-extrabold rounded-full transition-all active:scale-95 shadow-sm border border-border/20"
+                    className="flex items-center gap-2 px-6 py-4 bg-secondary hover:bg-secondary/70 text-foreground text-xs font-extrabold rounded-full transition-all active:scale-95 shadow-sm border border-border/20 cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5 animate-spin-slow" />
                     Load more inspiration
@@ -442,11 +483,11 @@ function HomeFeedContent() {
         </main>
       </div>
 
-      {/* 4. Mobile Bottom Navigation Bar (Instagram mobile style) */}
-      <nav className="fixed bottom-0 left-0 right-0 h-16 border-t border-border/60 bg-background/95 backdrop-blur-md flex items-center justify-around z-40 lg:hidden px-2 shadow-inner">
+      {/* 4. Mobile Bottom Navigation Bar (Floating Mockup Style) */}
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 w-[90%] max-w-md h-16 rounded-full border border-white/10 bg-zinc-950/80 backdrop-blur-xl flex items-center justify-around z-40 lg:hidden px-4 shadow-2xl">
         <button 
           onClick={handleResetFeed} 
-          className={`p-2.5 rounded-full transition-colors ${
+          className={`p-2 rounded-full transition-colors cursor-pointer ${
             !selectedCategory && !searchQuery && !isTrending ? "text-primary" : "text-muted-foreground"
           }`}
         >
@@ -458,28 +499,31 @@ function HomeFeedContent() {
             setSelectedCategory("");
             setSearchQuery("");
           }}
-          className={`p-2.5 rounded-full transition-colors ${
+          className={`p-2 rounded-full transition-colors cursor-pointer ${
             isTrending ? "text-primary" : "text-muted-foreground"
           }`}
         >
-          <Compass className="w-5.5 h-5.5" />
+          <Search className="w-5.5 h-5.5" />
         </button>
+        
+        {/* Central Add Button */}
         <button 
           onClick={() => showToast("Creation tool coming soon!")} 
-          className="p-2.5 rounded-full text-muted-foreground"
+          className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-lg active:scale-90 transition-all cursor-pointer"
         >
           <PlusSquare className="w-5.5 h-5.5" />
         </button>
+        
         <button 
           onClick={() => showToast("No new notifications")} 
-          className="p-2.5 rounded-full text-muted-foreground"
+          className="p-2 rounded-full text-muted-foreground cursor-pointer"
         >
           <Heart className="w-5.5 h-5.5" />
         </button>
         {isLoggedIn ? (
           <button 
             onClick={() => router.push("/profile")} 
-            className="p-1.5 rounded-full border-2 border-transparent focus:border-primary"
+            className="p-0.5 rounded-full border border-primary/45 cursor-pointer"
           >
             <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-white text-[9px] font-bold">
               {user?.name?.charAt(0).toUpperCase() || "U"}
@@ -488,16 +532,16 @@ function HomeFeedContent() {
         ) : (
           <button 
             onClick={() => router.push("/login")} 
-            className="p-2.5 rounded-full text-muted-foreground"
+            className="p-2 rounded-full text-muted-foreground cursor-pointer"
           >
             <User className="w-5.5 h-5.5" />
           </button>
         )}
-      </nav>
+      </div>
 
       {/* 5. Custom notification toast overlay */}
       {toastMessage && (
-        <div className="fixed bottom-20 left-1/2 -translate-y-1/2 lg:left-76 lg:-translate-y-0 bg-foreground text-background px-5 py-3 rounded-2xl shadow-2xl z-50 text-xs font-extrabold flex items-center gap-2 border border-border/20 transition-all duration-300">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 lg:left-76 lg:-translate-y-0 bg-foreground text-background px-5 py-3 rounded-2xl shadow-2xl z-50 text-xs font-extrabold flex items-center gap-2 border border-border/20 transition-all duration-300">
           <Info className="w-4 h-4 text-primary animate-bounce" />
           <span>{toastMessage}</span>
         </div>

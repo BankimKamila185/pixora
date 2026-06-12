@@ -214,6 +214,17 @@ class MockCollection:
             deleted_count = 1 if deleted else 0
         return DeleteResult()
 
+    async def delete_many(self, query: Dict[str, Any]) -> Any:
+        await asyncio.sleep(0.01)
+        data = self._read()
+        remaining = [doc for doc in data if not self._matches(doc, query)]
+        del_count = len(data) - len(remaining)
+        self._write(remaining)
+        
+        class DeleteResult:
+            deleted_count = del_count
+        return DeleteResult()
+
     async def count_documents(self, query: Dict[str, Any]) -> int:
         await asyncio.sleep(0.005)
         data = self._read()

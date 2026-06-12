@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Heart, Bookmark, Share2, MessageCircle } from "lucide-react";
+import { Heart, Bookmark, Share2, MessageCircle, MoreHorizontal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/utils/api";
 
@@ -23,34 +23,55 @@ interface ContentCardProps {
   onSaveToggle?: () => void;
 }
 
-// Generate deterministic creator username and avatar text based on content category and ID
+// Generate deterministic creator username, handle, and avatar text
 const getCreatorInfo = (category: string, id: string) => {
-  const creators: Record<string, string[]> = {
-    "Nature": ["eco_traveler", "forest_lens", "earth_spirit", "wild_scenery"],
-    "Technology": ["byte_code", "gadget_hub", "synth_wave", "future_tech"],
-    "Recipes": ["chef_mario", "baker_bites", "sweet_tooth", "spice_kitchen"],
-    "Travel": ["wanderlust_pix", "sky_wanderer", "beach_vibe", "nomad_diary"],
-    "Design": ["interior_vibe", "pixel_craft", "architect_mind", "minimal_deco"],
-    "Artificial Intelligence": ["neural_art", "ai_dreamer", "code_gpt", "prompt_pro"],
-    "Education": ["studious_mind", "book_worm", "brainy_bits", "learn_daily"],
-    "Photography": ["bokeh_click", "shutter_style", "neon_glow", "iso_lens"],
-    "Fitness": ["gain_train", "yoga_flow", "active_core", "beast_mode"]
+  const creators: Record<string, { name: string; handle: string }> = {
+    "Nature": { name: "Budiarti Rohman", handle: "@budiartirohman" },
+    "Technology": { name: "Michael Franz", handle: "@michael_franz" },
+    "Recipes": { name: "Sarah Jenkins", handle: "@sarah_bakes" },
+    "Travel": { name: "Alex Wanderer", handle: "@alex_wander" },
+    "Design": { name: "Michelle Soedibjo", handle: "@michelle_soedibjo" },
+    "Artificial Intelligence": { name: "Neural Dreamer", handle: "@neural_dream" },
+    "Education": { name: "Learn Daily", handle: "@learn_daily" },
+    "Photography": { name: "ISO Style Studio", handle: "@isostyle" },
+    "Fitness": { name: "Active Core Flow", handle: "@active_core" }
   };
 
-  const list = creators[category] || ["pixora_creator", "creative_mind", "visual_art"];
+  const defaultCreator = { name: "Budiarti Rohman", handle: "@budiartirohman" };
+  const info = creators[category] || defaultCreator;
+  
+  // Calculate relative time based on ID hash
+  const times = ["12m ago", "45m ago", "2h ago", "4h ago", "1d ago"];
   let sum = 0;
   for (let i = 0; i < id.length; i++) sum += id.charCodeAt(i);
-  const index = sum % list.length;
-  const username = list[index];
+  const time = times[sum % times.length];
+
+  const avatarText = info.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
 
   return {
-    username,
-    avatarText: username.split('_').map(w => w[0]).join('').substring(0, 2).toUpperCase()
+    name: info.name,
+    handle: info.handle,
+    time,
+    avatarText
   };
 };
 
+const getHashtags = (category: string) => {
+  const tags: Record<string, string> = {
+    "Nature": "#MindsetMatters #DailyInspo #CityVibes",
+    "Technology": "#CodeCraft #MinimalistDesk #Workspace",
+    "Recipes": "#SourdoughLove #BakingArt #GourmetFood",
+    "Travel": "#Wanderlust #ExploreWorld #NatureEscape",
+    "Design": "#InteriorAesthetics #MinimalDeco #ArchitectMind",
+    "Artificial Intelligence": "#AIArt #NeuralNetworks #PromptEngine",
+    "Education": "#DailyKnowledge #KeepLearning #BrainyBits",
+    "Photography": "#BokehClick #ISOStyle #NeonGlow",
+    "Fitness": "#YogaFlow #CoreGains #ActiveBody"
+  };
+  return tags[category] || "#Inspiration #PixoraFeed #Creative";
+};
+
 export default function ContentCard({ item, onClick, onLikeToggle, onSaveToggle }: ContentCardProps) {
-  const [isHovered, setIsHovered] = useState(false);
   const [liked, setLiked] = useState(item.liked_by_user || false);
   const [saved, setSaved] = useState(item.saved_by_user || false);
   const [likesCount, setLikesCount] = useState(item.likes);
@@ -58,7 +79,8 @@ export default function ContentCard({ item, onClick, onLikeToggle, onSaveToggle 
   const [shared, setShared] = useState(false);
   const [showHeartPop, setShowHeartPop] = useState(false);
 
-  const { username, avatarText } = getCreatorInfo(item.category, item.id);
+  const { name, handle, time, avatarText } = getCreatorInfo(item.category, item.id);
+  const hashtags = getHashtags(item.category);
 
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -113,37 +135,55 @@ export default function ContentCard({ item, onClick, onLikeToggle, onSaveToggle 
     }
   };
 
+  const formatViews = (views: number) => {
+    if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M Views`;
+    if (views >= 1000) return `${(views / 1000).toFixed(0)}K Views`;
+    return `${views} Views`;
+  };
+
   return (
     <motion.div
-      className="masonry-item relative overflow-hidden rounded-2xl bg-card border border-border/40 shadow-sm cursor-pointer group"
+      className="masonry-item relative overflow-hidden rounded-3xl bg-card border border-border shadow-md cursor-pointer group flex flex-col"
       onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       whileHover={{ y: -4 }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
     >
-      {/* Mobile Top Header: Creator info */}
-      <div className="flex items-center justify-between p-3 sm:hidden border-b border-border/20">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full p-[1.5px] bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600">
-            <div className="w-full h-full rounded-full bg-background flex items-center justify-center text-[9px] font-bold text-foreground">
+      {/* 1. Creator Header Bar (Always visible) */}
+      <div className="flex items-center justify-between p-4.5">
+        <div className="flex items-center gap-3">
+          {/* Avatar Ring */}
+          <div className="w-8.5 h-8.5 rounded-full p-[1.5px] bg-gradient-to-tr from-amber-400 via-yellow-500 to-amber-600">
+            <div className="w-full h-full rounded-full bg-zinc-950 flex items-center justify-center text-[10px] font-black text-white">
               {avatarText}
             </div>
           </div>
-          <span className="text-xs font-bold text-foreground">{username}</span>
+          <div className="flex flex-col">
+            <div className="flex items-center">
+              <span className="text-xs font-black text-foreground leading-tight truncate max-w-[110px]">{name}</span>
+              {/* Gold Verification Badge */}
+              <span className="inline-flex items-center justify-center bg-primary text-primary-foreground text-[7px] w-3 h-3 rounded-full ml-1 font-black">✓</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground leading-none mt-0.5">{handle}</span>
+          </div>
         </div>
-        <span className="text-[10px] font-semibold text-muted-foreground bg-secondary px-2.5 py-1 rounded-full">
-          {item.category}
-        </span>
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] font-bold text-muted-foreground font-mono bg-muted/50 px-2 py-0.5 rounded-full border border-border">
+            {time}
+          </span>
+          <button className="p-1 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted/40 cursor-pointer">
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      {/* Visual Image and Double-click area */}
+      {/* 2. Visual Image Area with double-click pop */}
       <div className="relative overflow-hidden select-none" onDoubleClick={handleDoubleClick}>
         <img
           src={item.image_url}
           alt={item.title}
           loading="lazy"
-          className="w-full object-cover transition-transform duration-700 ease-out group-hover:scale-103"
+          className="w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
           style={{ maxHeight: "600px", minHeight: "220px" }}
         />
 
@@ -156,120 +196,86 @@ export default function ContentCard({ item, onClick, onLikeToggle, onSaveToggle 
           )}
         </AnimatePresence>
 
-        {/* Desktop Hover Overlays */}
-        <AnimatePresence>
-          {isHovered && (
-            <motion.div
-              className="absolute inset-0 bg-black/40 hidden sm:flex flex-col justify-between p-4.5 z-10"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              {/* Top Bar: Creator Info & Save Button */}
-              <div className="flex justify-between items-center w-full">
-                <div className="flex items-center gap-2 bg-black/30 p-1.5 pr-3 rounded-full backdrop-blur-md">
-                  <div className="w-7 h-7 rounded-full p-[1.5px] bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600">
-                    <div className="w-full h-full rounded-full bg-black flex items-center justify-center text-[9px] font-bold text-white">
-                      {avatarText}
-                    </div>
-                  </div>
-                  <span className="text-xs font-bold text-white truncate max-w-[90px]">{username}</span>
-                </div>
-                
-                <button
-                  onClick={handleSave}
-                  className={`flex items-center gap-1 px-4.5 py-2.5 rounded-full font-bold text-sm transition-all shadow-md active:scale-95 ${
-                    saved
-                      ? "bg-black text-white hover:bg-zinc-900 border border-zinc-800"
-                      : "bg-[#e60023] text-white hover:bg-[#ff1a40]"
-                  }`}
-                >
-                  <Bookmark className="w-3.5 h-3.5 fill-current" />
-                  {saved ? "Saved" : "Save"}
-                </button>
-              </div>
-
-              {/* Bottom Bar: Title & Social Interaction */}
-              <div className="flex flex-col gap-2.5 text-white">
-                <h3 className="font-bold text-sm. sm:text-base line-clamp-2 leading-tight tracking-tight drop-shadow-sm">
-                  {item.title}
-                </h3>
-                
-                <div className="flex justify-between items-center mt-1 pt-2 border-t border-white/10">
-                  {/* Stats */}
-                  <div className="flex gap-3 text-xs text-zinc-300 font-medium">
-                    <span>{likesCount} likes</span>
-                    <span>{savesCount} saves</span>
-                  </div>
-                  
-                  {/* Action Buttons */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleLike}
-                      className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all active:scale-90"
-                      title="Like"
-                    >
-                      <Heart className={`w-4 h-4 ${liked ? "fill-rose-500 text-rose-500" : "text-white"}`} />
-                    </button>
-                    <button
-                      className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all active:scale-90"
-                      title="Comment"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleShare}
-                      className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all active:scale-90 relative"
-                      title="Share"
-                    >
-                      <Share2 className="w-4 h-4" />
-                      {shared && (
-                        <span className="absolute bottom-11 right-1/2 translate-x-1/2 bg-black text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg whitespace-nowrap border border-zinc-800">
-                          Link copied!
-                        </span>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Floating Views Counter Pill (Mockup Style) */}
+        <div className="absolute bottom-3 left-3 bg-black/50 text-white/90 text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-md border border-white/5 shadow-sm">
+          {formatViews(item.views)}
+        </div>
       </div>
 
-      {/* Mobile-Only Feed Stats and Description Card style (Instagram style layout below image) */}
-      <div className="p-3.5 sm:hidden flex flex-col gap-1.5 border-t border-border/10">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={handleLike} className="text-foreground transition-all active:scale-90">
-              <Heart className={`w-5 h-5 ${liked ? "fill-rose-600 text-rose-600" : "text-foreground"}`} />
+      {/* 3. Text Details & Social Action Bar */}
+      <div className="p-4.5 flex flex-col gap-3">
+        {/* Caption & Description */}
+        <div className="space-y-1">
+          <h3 className="font-bold text-sm text-foreground leading-snug tracking-tight">
+            {item.title}
+          </h3>
+          <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">
+            {item.description}
+          </p>
+          <p className="text-xs font-black text-primary leading-snug mt-1 font-sans">
+            {hashtags}
+          </p>
+        </div>
+
+        {/* Separator */}
+        <div className="border-t border-border mt-0.5"></div>
+
+        {/* Action Toolbar */}
+        <div className="flex justify-between items-center pt-1">
+          <div className="flex gap-2">
+            {/* Like */}
+            <button
+              onClick={handleLike}
+              className={`p-2 rounded-full transition-all active:scale-90 cursor-pointer flex items-center gap-1.5 text-[10px] font-bold ${
+                liked 
+                  ? "bg-rose-950/20 text-rose-500 border border-rose-900/30" 
+                  : "bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted border border-transparent"
+              }`}
+              title="Like"
+            >
+              <Heart className={`w-3.5 h-3.5 ${liked ? "fill-current text-rose-500" : ""}`} />
+              <span>{likesCount}</span>
             </button>
-            <button className="text-foreground transition-all active:scale-90">
-              <MessageCircle className="w-5 h-5" />
-            </button>
-            <button onClick={handleShare} className="text-foreground transition-all active:scale-90 relative">
-              <Share2 className="w-5 h-5" />
+
+            {/* Comment / Category Badge */}
+            <div
+              className="p-2 px-3 rounded-full bg-muted/30 text-muted-foreground border border-transparent flex items-center gap-1.5 text-[10px] font-bold"
+              title="Category"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span className="uppercase tracking-wide text-[8px] font-black">{item.category}</span>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            {/* Share */}
+            <button
+              onClick={handleShare}
+              className="p-2 rounded-full bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted border border-transparent transition-all active:scale-90 relative cursor-pointer"
+              title="Share"
+            >
+              <Share2 className="w-3.5 h-3.5" />
               {shared && (
-                <span className="absolute bottom-7 left-0 bg-black text-white text-[9px] px-2 py-0.5 rounded shadow whitespace-nowrap z-40">
-                  Copied!
+                <span className="absolute bottom-11 right-1/2 translate-x-1/2 bg-zinc-950 text-white text-[9px] px-2.5 py-1 rounded-full shadow-lg whitespace-nowrap border border-border">
+                  Link copied!
                 </span>
               )}
             </button>
+
+            {/* Save */}
+            <button
+              onClick={handleSave}
+              className={`p-2 rounded-full transition-all active:scale-90 cursor-pointer flex items-center gap-1.5 text-[10px] font-bold ${
+                saved 
+                  ? "bg-primary text-primary-foreground" 
+                  : "bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted border border-transparent"
+              }`}
+              title="Save"
+            >
+              <Bookmark className={`w-3.5 h-3.5 ${saved ? "fill-current" : ""}`} />
+              <span>{savesCount}</span>
+            </button>
           </div>
-          
-          <button onClick={handleSave} className="text-foreground transition-all active:scale-90">
-            <Bookmark className={`w-5 h-5 ${saved ? "fill-primary text-primary" : "text-foreground"}`} />
-          </button>
-        </div>
-
-        <div className="text-xs font-extrabold text-foreground">
-          {likesCount} likes • {savesCount} saves
-        </div>
-
-        <div className="text-xs text-foreground leading-snug">
-          <span className="font-extrabold mr-1.5">{username}</span>
-          <span className="text-muted-foreground">{item.title}</span>
         </div>
       </div>
     </motion.div>
