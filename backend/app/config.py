@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REFRESH_TOKEN: str = ""
+    GOOGLE_ACCESS_TOKEN: str = ""
 
     class Config:
         env_file = ".env"

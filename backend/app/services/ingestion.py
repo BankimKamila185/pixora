@@ -418,7 +418,11 @@ def get_mock_drive_file_catalog(file_id: str, category: str) -> List[Dict[str, A
 
 
 async def get_google_access_token() -> Optional[str]:
-    """Retrieves a fresh access token using the configured refresh token."""
+    """Retrieves a fresh access token using the configured refresh token or returns the manually configured one."""
+    if settings.GOOGLE_ACCESS_TOKEN:
+        logger.info("Using manually configured Google Access Token.")
+        return settings.GOOGLE_ACCESS_TOKEN
+
     if not settings.GOOGLE_REFRESH_TOKEN or not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
         return None
     
