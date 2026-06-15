@@ -59,12 +59,14 @@ async def update_user_interest_profile(user_id: str):
         weight = INTERACTION_WEIGHTS.get(action, 0.0)
         
         # Recency decay on interaction: recent interactions count more
-        ts = interact.get("timestamp", now)
+        ts = interact.get("timestamp") or now
         if isinstance(ts, str):
             try:
                 ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
             except Exception:
                 ts = now
+        elif not isinstance(ts, datetime):
+            ts = now
         age_hours = max(0.0, (now - ts).total_seconds() / 3600.0)
         # Decay: full weight in first 24h, halved at 72h, quartered at 168h (1 week)
         import math

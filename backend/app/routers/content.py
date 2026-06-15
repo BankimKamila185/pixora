@@ -2,7 +2,7 @@ import uuid
 import logging
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Depends, status, Request
+from fastapi import APIRouter, HTTPException, Depends, status, Request, BackgroundTasks
 
 from app.database import get_collection
 from app.models import ContentOut, OnboardingInterests, ContentDB
@@ -244,6 +244,7 @@ async def search_content(
 @router.get("/api/content/{content_id}", response_model=ContentOut, dependencies=[Depends(check_rate_limit)])
 async def get_content_details(
     content_id: str,
+    background_tasks: BackgroundTasks,
     current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
 ):
     content_col = get_collection("content")
@@ -271,8 +272,8 @@ async def get_content_details(
             "timestamp": datetime.utcnow()
         }
         await interactions_col.insert_one(view_interaction)
-        # Recalculate interest profile asynchronously
-        await update_user_interest_profile(user_id)
+        # Recalculate interest profile asynchronously in the background
+        background_tasks.add_task(update_user_interest_profile, user_id)
         
         # Enrich liked/saved flags
         liked = await interactions_col.find_one({"userId": user_id, "contentId": content_id, "actionType": "like"})
@@ -289,6 +290,7 @@ async def get_content_details(
 @router.post("/api/content/{content_id}/like", dependencies=[Depends(check_rate_limit)])
 async def toggle_like_content(
     content_id: str,
+    background_tasks: BackgroundTasks,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     content_col = get_collection("content")
@@ -324,7 +326,7 @@ async def toggle_like_content(
         new_likes = max(0, content_item.get("likes", 0) - 1)
         await content_col.update_one({"_id": content_id}, {"$set": {"likes": new_likes}})
         
-        await update_user_interest_profile(user_id)
+        background_tasks.add_task(update_user_interest_profile, user_id)
         return {"liked": False, "likes": new_likes}
     else:
         # Toggle like
@@ -341,13 +343,14 @@ async def toggle_like_content(
         new_likes = content_item.get("likes", 0) + 1
         await content_col.update_one({"_id": content_id}, {"$set": {"likes": new_likes}})
         
-        await update_user_interest_profile(user_id)
+        background_tasks.add_task(update_user_interest_profile, user_id)
         return {"liked": True, "likes": new_likes}
 
 
 @router.post("/api/content/{content_id}/save", dependencies=[Depends(check_rate_limit)])
 async def toggle_save_content(
     content_id: str,
+    background_tasks: BackgroundTasks,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     content_col = get_collection("content")
@@ -380,7 +383,7 @@ async def toggle_save_content(
         new_saves = max(0, content_item.get("saves", 0) - 1)
         await content_col.update_one({"_id": content_id}, {"$set": {"saves": new_saves}})
         
-        await update_user_interest_profile(user_id)
+        background_tasks.add_task(update_user_interest_profile, user_id)
         return {"saved": False, "saves": new_saves}
     else:
         # Save
@@ -396,13 +399,14 @@ async def toggle_save_content(
         new_saves = content_item.get("saves", 0) + 1
         await content_col.update_one({"_id": content_id}, {"$set": {"saves": new_saves}})
         
-        await update_user_interest_profile(user_id)
+        background_tasks.add_task(update_user_interest_profile, user_id)
         return {"saved": True, "saves": new_saves}
 
 
 @router.post("/api/content/{content_id}/share", dependencies=[Depends(check_rate_limit)])
 async def share_content(
     content_id: str,
+    background_tasks: BackgroundTasks,
     current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
 ):
     content_col = get_collection("content")
@@ -425,7 +429,7 @@ async def share_content(
             "timestamp": datetime.utcnow()
         }
         await interactions_col.insert_one(share_log)
-        await update_user_interest_profile(user_id)
+        background_tasks.add_task(update_user_interest_profile, user_id)
         
     return {"shares": new_shares}
 
@@ -434,6 +438,7 @@ async def share_content(
 @router.post("/api/users/onboarding", dependencies=[Depends(check_rate_limit)])
 async def save_onboarding_interests(
     onboarding: OnboardingInterests,
+    background_tasks: BackgroundTasks,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     users_col = get_collection("users")
@@ -450,7 +455,7 @@ async def save_onboarding_interests(
     )
     
     # Recalculate interest profile with new baseline
-    await update_user_interest_profile(user_id)
+    background_tasks.add_task(update_user_interest_profile, user_id)
     return {"message": "Onboarding successful", "followed_categories": valid_choices}
 
 
@@ -526,6 +531,7 @@ class DwellTimeCreate(BaseModel):
 async def comment_content(
     content_id: str,
     comment_data: CommentCreate,
+    background_tasks: BackgroundTasks,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     content_col = get_collection("content")
@@ -552,7 +558,7 @@ async def comment_content(
     await content_col.update_one({"_id": content_id}, {"$set": {"comments": new_comments_count}})
     
     # Recalculate profile
-    await update_user_interest_profile(user_id)
+    background_tasks.add_task(update_user_interest_profile, user_id)
     return {"message": "Comment added successfully", "comments": new_comments_count}
 
 
@@ -560,6 +566,7 @@ async def comment_content(
 async def watch_content(
     content_id: str,
     dwell_data: DwellTimeCreate,
+    background_tasks: BackgroundTasks,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     content_col = get_collection("content")
@@ -582,7 +589,7 @@ async def watch_content(
     await interactions_col.insert_one(new_watch)
     
     # Recalculate profile
-    await update_user_interest_profile(user_id)
+    background_tasks.add_task(update_user_interest_profile, user_id)
     return {"message": "Watch history recorded"}
 
 

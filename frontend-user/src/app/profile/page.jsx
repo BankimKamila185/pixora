@@ -122,6 +122,21 @@ function ProfileContent() {
   const postCount = (saved_posts?.length || 0) + (liked_posts?.length || 0);
   const username = user.email?.split("@")[0] || "pixora_user";
 
+  // ── Compute real per-category engagement data from liked posts ──
+  const categoryEngagement = {};
+  (liked_posts || []).forEach(p => {
+    const cat = p.category || "Other";
+    if (!categoryEngagement[cat]) categoryEngagement[cat] = { likes: 0, views: 0, saves: 0 };
+    categoryEngagement[cat].likes += 1; // each liked post = 1 like signal
+    categoryEngagement[cat].views += (p.views || 0);
+  });
+  (saved_posts || []).forEach(p => {
+    const cat = p.category || "Other";
+    if (!categoryEngagement[cat]) categoryEngagement[cat] = { likes: 0, views: 0, saves: 0 };
+    categoryEngagement[cat].saves += 1;
+  });
+  const sortedEngagement = Object.entries(categoryEngagement).sort(([, a], [, b]) => b.likes - a.likes);
+
   const navItems = [
     { id: "home", label: "Home", icon: <Home size={24} /> },
     { id: "explore", label: "Explore", icon: <Compass size={24} /> },
@@ -649,12 +664,12 @@ function ProfileContent() {
                     <span className="igp-stat-label">posts</span>
                   </div>
                   <div className="igp-stat">
-                    <span className="igp-stat-num">348</span>
-                    <span className="igp-stat-label">followers</span>
+                    <span className="igp-stat-num">{liked_posts?.length || 0}</span>
+                    <span className="igp-stat-label">liked</span>
                   </div>
                   <div className="igp-stat">
-                    <span className="igp-stat-num">182</span>
-                    <span className="igp-stat-label">following</span>
+                    <span className="igp-stat-num">{saved_posts?.length || 0}</span>
+                    <span className="igp-stat-label">saved</span>
                   </div>
                 </div>
 
@@ -666,12 +681,16 @@ function ProfileContent() {
               </div>
             </div>
 
-            {/* Highlights Row */}
+            {/* Highlights Row — shows user's top interest categories */}
             {sortedInterests.length > 0 && (
               <div className="igp-highlights">
-                {sortedInterests.slice(0, 8).map(([cat]) => (
+                {sortedInterests.slice(0, 8).map(([cat, score]) => (
                   <div key={cat} className="igp-highlight-item">
-                    <div className="igp-highlight-circle">
+                    <div className="igp-highlight-circle" style={{ border: `2px solid ${{
+                      "Nature": "#22c55e", "Technology": "#3b82f6", "Recipes": "#f97316",
+                      "Travel": "#a855f7", "Design": "#ec4899", "Artificial Intelligence": "#06b6d4",
+                      "Education": "#eab308", "Photography": "#6366f1", "Fitness": "#ef4444"
+                    }[cat] || "#363636"}` }}>
                       {CATEGORY_EMOJIS[cat] || "✨"}
                     </div>
                     <span className="igp-highlight-label">{cat.split(" ")[0]}</span>
@@ -680,12 +699,54 @@ function ProfileContent() {
               </div>
             )}
 
+            {/* Category Engagement Breakdown */}
+            {sortedEngagement.length > 0 && (
+              <div style={{ padding: "16px 0", borderBottom: "1px solid #262626" }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, color: "#a8a8a8", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "1px" }}>
+                  📊 Your Category Activity
+                </h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
+                  {sortedEngagement.map(([cat, data]) => {
+                    const barColor = {
+                      "Nature": "#22c55e", "Technology": "#3b82f6", "Recipes": "#f97316",
+                      "Travel": "#a855f7", "Design": "#ec4899", "Artificial Intelligence": "#06b6d4",
+                      "Education": "#eab308", "Photography": "#6366f1", "Fitness": "#ef4444"
+                    }[cat] || "#0095f6";
+                    return (
+                      <div key={cat} style={{ background: "#111", border: "1px solid #262626", borderRadius: 10, padding: "12px 14px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontSize: 18 }}>{CATEGORY_EMOJIS[cat] || "📷"}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#f5f5f5" }}>{cat}</span>
+                        </div>
+                        <div style={{ display: "flex", gap: 12 }}>
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: "#ed4956" }}>{data.likes}</div>
+                            <div style={{ fontSize: 10, color: "#a8a8a8", textTransform: "uppercase" }}>Likes</div>
+                          </div>
+                          {data.saves > 0 && (
+                            <div style={{ textAlign: "center" }}>
+                              <div style={{ fontSize: 16, fontWeight: 700, color: "#fcb045" }}>{data.saves}</div>
+                              <div style={{ fontSize: 10, color: "#a8a8a8", textTransform: "uppercase" }}>Saves</div>
+                            </div>
+                          )}
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: barColor }}>{fmtNum(data.views)}</div>
+                            <div style={{ fontSize: 10, color: "#a8a8a8", textTransform: "uppercase" }}>Views</div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Tabs */}
             <div className="igp-tabs">
               {[
                 { id: "saved", label: "Posts", icon: <Grid3x3 size={12} /> },
                 { id: "liked", label: "Liked", icon: <Heart size={12} /> },
-                { id: "activity", label: "Tagged", icon: <Calendar size={12} /> },
+                { id: "activity", label: "Activity", icon: <Calendar size={12} /> },
               ].map(tab => (
                 <button
                   key={tab.id}

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import os
 import re
-from fastapi import APIRouter, HTTPException, Depends, status, Request
+from fastapi import APIRouter, HTTPException, Depends, status, Request, BackgroundTasks
 
 def extract_google_id(input_str: Optional[str]) -> Optional[str]:
     if not input_str:
@@ -37,7 +37,11 @@ from app.models import (
     CategoryPopularityPoint
 )
 from app.routers.auth import get_current_user, check_rate_limit
-from app.services.recommendation import VALID_CATEGORIES, get_personalized_recommendations
+from app.services.recommendation import (
+    VALID_CATEGORIES,
+    get_personalized_recommendations,
+    update_user_interest_profile
+)
 from app.services.ingestion import ingest_unsplash_images, ingest_pexels_images
 from pydantic import BaseModel, Field
 
@@ -68,8 +72,8 @@ async def check_admin_privilege(request: Request):
         logger.warning("Access to admin API without authorization header permitted in development mode.")
 
 router = APIRouter(
-    prefix="/api/admin", 
-    tags=["admin"], 
+    prefix="/api/admin",
+    tags=["admin"],
     dependencies=[Depends(check_admin_privilege), Depends(check_rate_limit)]
 )
 
@@ -88,6 +92,13 @@ class DriveImportRequest(BaseModel):
     access_token: Optional[str] = Field(None, description="Google OAuth2 Access Token")
     count: int = Field(10, ge=1, le=50, description="Max folder items to ingest")
 
+class SimulationActivityRequest(BaseModel):
+    user_id: str = Field(..., description="User ID to simulate for")
+    content_id: str = Field(..., description="Content ID to interact with")
+    action_type: str = Field(..., description="watch, like, save, share, comment")
+    dwell_time: Optional[float] = Field(None, description="Dwell time in seconds for watch/view actions")
+    comment_text: Optional[str] = Field(None, description="Comment text")
+
 # NOTE: For simplicity in this full-stack mockup, we allow requests for admin statistics.
 # In production, we would add role-based authorization: UserDB.role == "admin" validation.
 
@@ -97,17 +108,17 @@ class DriveImportRequest(BaseModel):
 async def get_kpi_summary():
     users_col = get_collection("users")
     content_col = get_collection("content")
-    
+
     total_users = await users_col.count_documents({})
     total_content = await content_col.count_documents({})
-    
+
     # Aggregate interaction metrics from all content
     all_content = await content_col.find({}).to_list(length=1000)
     total_views = sum(c.get("views", 0) for c in all_content)
     total_likes = sum(c.get("likes", 0) for c in all_content)
     total_saves = sum(c.get("saves", 0) for c in all_content)
     total_shares = sum(c.get("shares", 0) for c in all_content)
-    
+
     return {
         "total_users": total_users,
         "total_content": total_content,
@@ -123,37 +134,37 @@ async def get_user_analytics():
     users_col = get_collection("users")
     content_col = get_collection("content")
     interactions_col = get_collection("interactions")
-    
+
     users = await users_col.find({}).to_list(length=100)
     user_profiles = []
-    
+
     for u in users:
         u_id = u["_id"]
-        
+
         # 1. Fetch user's interactions
         cursor = interactions_col.find({"userId": u_id})
         interactions = await cursor.to_list(length=1000)
-        
+
         views = sum(1 for i in interactions if i["actionType"] == "view")
         likes = sum(1 for i in interactions if i["actionType"] == "like")
         saves = sum(1 for i in interactions if i["actionType"] == "save")
         shares = sum(1 for i in interactions if i["actionType"] == "share")
-        
+
         # 2. Get favorite categories sorted by user interest weights
         interests = u.get("interests", {})
         sorted_interests = sorted(interests.items(), key=lambda x: x[1], reverse=True)
         favs = [cat for cat, wt in sorted_interests if wt > 0.05][:3]
         if not favs:
             favs = u.get("followed_categories", [])[:3]
-            
+
         # 3. Get recent activities
         recent = sorted(interactions, key=lambda x: x["timestamp"], reverse=True)[:5]
-        
+
         # Match content titles for activities
         recent_c_ids = [r["contentId"] for r in recent]
         recent_contents = await content_col.find({"_id": {"$in": recent_c_ids}}).to_list(length=len(recent_c_ids))
         content_titles = {c["_id"]: c["title"] for c in recent_contents}
-        
+
         activities = []
         for r in recent:
             activities.append({
@@ -161,11 +172,11 @@ async def get_user_analytics():
                 "content_title": content_titles.get(r["contentId"], "Unknown Content"),
                 "timestamp": r["timestamp"]
             })
-            
+
         # 4. Compute Engagement Score
         # engagement_score = views * 1 + likes * 5 + saves * 10 + shares * 5
         score = (views * 1.0) + (likes * 5.0) + (saves * 10.0) + (shares * 5.0)
-        
+
         user_profiles.append({
             "user_id": u_id,
             "name": u["name"],
@@ -177,7 +188,7 @@ async def get_user_analytics():
             "recent_activities": activities,
             "engagement_score": round(score, 1)
         })
-        
+
     return user_profiles
 
 
@@ -186,12 +197,12 @@ async def get_dashboard_trends():
     users_col = get_collection("users")
     content_col = get_collection("content")
     interactions_col = get_collection("interactions")
-    
+
     # 1. Growth Data: count users created daily in last 7 days
     now = datetime.utcnow()
     growth_chart = []
     total_users_so_far = await users_col.count_documents({})
-    
+
     # Let's generate growth points retrospectively for 7 days
     for i in range(6, -1, -1):
         day = now - timedelta(days=i)
@@ -204,7 +215,7 @@ async def get_dashboard_trends():
             "date": date_str,
             "users": max(1, registered_before_date)
         })
-        
+
     # 2. Activity Data: views, likes, saves count over last 7 days
     activity_chart = []
     for i in range(6, -1, -1):
@@ -212,11 +223,11 @@ async def get_dashboard_trends():
         start_day = datetime(day.year, day.month, day.day)
         end_day = start_day + timedelta(days=1)
         date_str = day.strftime("%b %d")
-        
+
         day_views = await interactions_col.count_documents({"actionType": "view", "timestamp": {"$gte": start_day, "$lt": end_day}})
         day_likes = await interactions_col.count_documents({"actionType": "like", "timestamp": {"$gte": start_day, "$lt": end_day}})
         day_saves = await interactions_col.count_documents({"actionType": "save", "timestamp": {"$gte": start_day, "$lt": end_day}})
-        
+
         # Add baseline mock values so charts always have active visuals in empty state
         activity_chart.append({
             "date": date_str,
@@ -224,7 +235,7 @@ async def get_dashboard_trends():
             "likes": day_likes + 4,
             "saves": day_saves + 2
         })
-        
+
     # 3. Category Popularity Breakdown
     category_chart = []
     all_content = await content_col.find({}).to_list(length=1000)
@@ -237,37 +248,37 @@ async def get_dashboard_trends():
             "count": item_count,
             "views": views_count
         })
-        
+
     # 4. Fastest growing category
     # Count interactions in last 3 days vs preceding 3 days
     three_days_ago = now - timedelta(days=3)
     six_days_ago = now - timedelta(days=6)
-    
+
     recent_interactions = await interactions_col.find({"timestamp": {"$gte": three_days_ago}}).to_list(length=500)
     prior_interactions = await interactions_col.find({"timestamp": {"$gte": six_days_ago, "$lt": three_days_ago}}).to_list(length=500)
-    
+
     # Map to categories
     # Fetch content details
     all_c_ids = list(set([i["contentId"] for i in recent_interactions + prior_interactions]))
     content_details = await content_col.find({"_id": {"$in": all_c_ids}}).to_list(length=len(all_c_ids))
     content_cats = {c["_id"]: c["category"] for c in content_details}
-    
+
     recent_counts = {cat: 0 for cat in VALID_CATEGORIES}
     prior_counts = {cat: 0 for cat in VALID_CATEGORIES}
-    
+
     for r in recent_interactions:
         cat = content_cats.get(r["contentId"])
         if cat in recent_counts:
             recent_counts[cat] += 1
-            
+
     for p in prior_interactions:
         cat = content_cats.get(p["contentId"])
         if cat in prior_counts:
             prior_counts[cat] += 1
-            
+
     fastest_growing = VALID_CATEGORIES[0]
     max_growth_pct = -1.0
-    
+
     for cat in VALID_CATEGORIES:
         rc = recent_counts[cat]
         pc = prior_counts[cat]
@@ -278,7 +289,7 @@ async def get_dashboard_trends():
         if growth > max_growth_pct:
             max_growth_pct = growth
             fastest_growing = cat
-            
+
     return {
         "user_growth": growth_chart,
         "daily_activities": activity_chart,
@@ -293,10 +304,10 @@ async def monitor_recommendations():
     users_col = get_collection("users")
     interactions_col = get_collection("interactions")
     content_col = get_collection("content")
-    
+
     users = await users_col.find({}).to_list(length=500)
     total_users = len(users)
-    
+
     # 1. Recommendation Accuracy
     # Define accuracy as percentage of user interactions that match their top recommended category.
     # In practice: (Total likes + saves on recommended items) / Total views on recommended items
@@ -304,19 +315,19 @@ async def monitor_recommendations():
     all_interactions = await interactions_col.find({}).to_list(length=2000)
     total_views = sum(1 for i in all_interactions if i["actionType"] == "view")
     pos_interactions = sum(1 for i in all_interactions if i["actionType"] in ["like", "save"])
-    
+
     # Add base multiplier for reasonable visuals: average accuracy = 84.5%
     accuracy = 84.5
     if total_views > 0:
         accuracy = round((pos_interactions / total_views) * 100, 1)
         # bound between 60 and 98 for realistic mock
         accuracy = max(60.0, min(98.0, accuracy))
-        
+
     # 2. Most Recommended Categories
     # Average category weight across all user interest profiles
     cat_weights = {cat: 0.0 for cat in VALID_CATEGORIES}
     users_with_interests = 0
-    
+
     for u in users:
         interests = u.get("interests", {})
         if interests:
@@ -324,7 +335,7 @@ async def monitor_recommendations():
             for cat, wt in interests.items():
                 if cat in cat_weights:
                     cat_weights[cat] += wt
-                    
+
     rec_cats = []
     if users_with_interests > 0:
         for cat, total_wt in cat_weights.items():
@@ -333,9 +344,9 @@ async def monitor_recommendations():
     else:
         # Fallback equal share
         rec_cats = [{"category": cat, "share": round(100.0 / len(VALID_CATEGORIES), 1)} for cat in VALID_CATEGORIES]
-        
+
     rec_cats = sorted(rec_cats, key=lambda x: x["share"], reverse=True)
-    
+
     # 3. User Engagement Rate
     # Percentage of active users (who had at least 1 interaction in last 7 days)
     now = datetime.utcnow()
@@ -346,7 +357,7 @@ async def monitor_recommendations():
         engagement_rate = round((len(active_users) / total_users) * 100, 1)
     # Default visual baseline
     engagement_rate = max(15.0, engagement_rate)
-    
+
     return {
         "accuracy": accuracy,
         "most_recommended_categories": rec_cats,
@@ -363,7 +374,7 @@ async def monitor_recommendations():
 @router.post("/content", response_model=ContentOut, dependencies=[Depends(check_rate_limit)])
 async def create_content(content: ContentCreate):
     content_col = get_collection("content")
-    
+
     c_id = str(uuid.uuid4())
     new_item = {
         "_id": c_id,
@@ -378,7 +389,7 @@ async def create_content(content: ContentCreate):
         "shares": 0,
         "created_at": datetime.utcnow()
     }
-    
+
     await content_col.insert_one(new_item)
     new_item["id"] = c_id
     return new_item
@@ -387,11 +398,11 @@ async def create_content(content: ContentCreate):
 @router.put("/content/{content_id}", response_model=ContentOut, dependencies=[Depends(check_rate_limit)])
 async def update_content(content_id: str, content: ContentUpdate):
     content_col = get_collection("content")
-    
+
     existing = await content_col.find_one({"_id": content_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Content not found")
-        
+
     update_data = {}
     if content.title is not None:
         update_data["title"] = content.title
@@ -405,10 +416,10 @@ async def update_content(content_id: str, content: ContentUpdate):
         update_data["category"] = content.category
     if content.tags is not None:
         update_data["tags"] = content.tags
-        
+
     if update_data:
         await content_col.update_one({"_id": content_id}, {"$set": update_data})
-        
+
     updated = await content_col.find_one({"_id": content_id})
     updated["id"] = updated["_id"]
     return updated
@@ -418,16 +429,16 @@ async def update_content(content_id: str, content: ContentUpdate):
 async def delete_content(content_id: str):
     content_col = get_collection("content")
     interactions_col = get_collection("interactions")
-    
+
     existing = await content_col.find_one({"_id": content_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Content not found")
-        
+
     # Delete content
     await content_col.delete_one({"_id": content_id})
     # Clean up associated interactions
     await interactions_col.delete_one({"contentId": content_id})
-    
+
     return {"message": "Content deleted successfully", "id": content_id}
 
 
@@ -441,9 +452,9 @@ async def inspect_recommendations_for_user(user_id: str):
     user = await users_col.find_one({"_id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-        
+
     items = await get_personalized_recommendations(user_id, limit=20, skip=0)
-    
+
     formatted_items = []
     for item in items:
         formatted_items.append({
@@ -454,20 +465,106 @@ async def inspect_recommendations_for_user(user_id: str):
             "rec_score": item.get("_rec_score", 0.0),
             "score_breakdown": item.get("_score_breakdown", {})
         })
-        
+
+    interactions_col = get_collection("interactions")
+    content_col = get_collection("content")
+
+    # Fetch all interactions for this user to count views & likes per category
+    user_interactions = await interactions_col.find({"userId": user_id}).to_list(length=1000)
+
+    # Map content ID to category
+    content_ids = list(set(i["contentId"] for i in user_interactions))
+    content_items = await content_col.find({"_id": {"$in": content_ids}}).to_list(length=len(content_ids))
+    content_to_cat = {c["_id"]: c.get("category", "Other") for c in content_items}
+
+    category_views = {cat: 0 for cat in VALID_CATEGORIES}
+    category_likes = {cat: 0 for cat in VALID_CATEGORIES}
+
+    for interact in user_interactions:
+        c_id = interact["contentId"]
+        action = interact["actionType"]
+        cat = content_to_cat.get(c_id)
+        if cat in VALID_CATEGORIES:
+            if action in ["view", "watch"]:
+                category_views[cat] += 1
+            elif action == "like":
+                category_likes[cat] += 1
+
+    interests = user.get("interests", {})
+    interests_details = {}
+    for cat in VALID_CATEGORIES:
+        weight = interests.get(cat, 0.0)
+        views = category_views.get(cat, 0)
+        likes = category_likes.get(cat, 0)
+        if weight > 0 or views > 0 or likes > 0:
+            interests_details[cat] = {
+                "weight": weight,
+                "views": views,
+                "likes": likes
+            }
+
     return {
         "user_id": user_id,
         "name": user["name"],
         "interests": user.get("interests", {}),
+        "interests_details": interests_details,
         "followed_categories": user.get("followed_categories", []),
         "recommendations": formatted_items
     }
+
+@router.post("/simulate/activity", dependencies=[Depends(check_rate_limit)])
+async def simulate_user_activity(
+    req: SimulationActivityRequest,
+    background_tasks: BackgroundTasks
+):
+    content_col = get_collection("content")
+    interactions_col = get_collection("interactions")
+
+    content_item = await content_col.find_one({"_id": req.content_id})
+    if not content_item:
+        raise HTTPException(status_code=404, detail="Content not found")
+
+    # Create the interaction log
+    interact_id = str(uuid.uuid4())
+    interaction = {
+        "_id": interact_id,
+        "userId": req.user_id,
+        "contentId": req.content_id,
+        "actionType": req.action_type,
+        "timestamp": datetime.utcnow()
+    }
+    if req.dwell_time is not None:
+        interaction["dwellTime"] = req.dwell_time
+    if req.comment_text is not None:
+        interaction["comment_text"] = req.comment_text
+
+    await interactions_col.insert_one(interaction)
+
+    # Increment view/like/save count on content
+    update_query = {}
+    if req.action_type in ["view", "watch"]:
+        update_query = {"$inc": {"views": 1}}
+    elif req.action_type == "like":
+        update_query = {"$inc": {"likes": 1}}
+    elif req.action_type == "save":
+        update_query = {"$inc": {"saves": 1}}
+    elif req.action_type == "share":
+        update_query = {"$inc": {"shares": 1}}
+    elif req.action_type == "comment":
+        update_query = {"$inc": {"comments": 1}}
+
+    if update_query:
+        await content_col.update_one({"_id": req.content_id}, update_query)
+
+    # Recalculate interest profile asynchronously
+    background_tasks.add_task(update_user_interest_profile, req.user_id)
+    return {"message": "Simulated interaction logged successfully"}
 
 @router.post("/ingest", response_model=List[ContentOut], dependencies=[Depends(check_rate_limit)])
 async def ingest_content(req: IngestionRequest):
     if req.category not in VALID_CATEGORIES:
         raise HTTPException(status_code=400, detail="Invalid target category")
-        
+
     source_lower = req.source.lower()
     if source_lower == "unsplash":
         items = await ingest_unsplash_images(req.query, req.category, req.count)
@@ -475,10 +572,10 @@ async def ingest_content(req: IngestionRequest):
         items = await ingest_pexels_images(req.query, req.category, req.count)
     else:
         raise HTTPException(status_code=400, detail="Invalid source. Must be unsplash or pexels")
-        
+
     if not items:
         raise HTTPException(status_code=404, detail="No images found from source")
-        
+
     # Insert items into database
     content_col = get_collection("content")
     inserted_count = 0
@@ -487,15 +584,15 @@ async def ingest_content(req: IngestionRequest):
         if not existing:
             await content_col.insert_one(item)
             inserted_count += 1
-            
+
     logger.info(f"Ingested {inserted_count} new images for category {req.category} using search query '{req.query}'")
-    
+
     # Format return list
     formatted_items = []
     for item in items:
         item["id"] = item["_id"]
         formatted_items.append(item)
-        
+
     return formatted_items
 
 @router.post("/drive/import", response_model=List[ContentOut], dependencies=[Depends(check_rate_limit)])
@@ -508,7 +605,7 @@ async def import_google_drive(req: DriveImportRequest):
             raise HTTPException(status_code=400, detail="Target category is required for single folder or file imports")
         if req.category not in VALID_CATEGORIES:
             raise HTTPException(status_code=400, detail="Invalid target category")
-        
+
     if not folder_id and not file_id:
         raise HTTPException(status_code=400, detail="Either folder_id or file_id must be provided")
 
@@ -551,7 +648,7 @@ async def import_google_drive(req: DriveImportRequest):
         if not existing:
             await content_col.insert_one(item)
             inserted_count += 1
-            
+
     logger.info(f"Imported {inserted_count} new items from Google Drive (parent={req.is_parent_folder})")
 
     if folder_id:
@@ -573,5 +670,5 @@ async def import_google_drive(req: DriveImportRequest):
     for item in items:
         item["id"] = item["_id"]
         formatted_items.append(item)
-        
+
     return formatted_items

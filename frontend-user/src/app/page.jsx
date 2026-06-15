@@ -143,9 +143,44 @@ function PostCard({ item, onOpen, avatarImg }) {
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
 
+  // ── Dwell-time tracking (Instagram-style: time in viewport = signal) ──
+  const cardRef = useRef(null);
+  const dwellStartRef = useRef(null);
+  const dwellReportedRef = useRef(false);
+
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          dwellStartRef.current = Date.now();
+          dwellReportedRef.current = false;
+        } else {
+          if (dwellStartRef.current && !dwellReportedRef.current) {
+            const seconds = (Date.now() - dwellStartRef.current) / 1000;
+            // Only report if user spent at least 2 seconds on this post (meaningful signal)
+            if (seconds >= 2) {
+              dwellReportedRef.current = true;
+              api.trackWatch(item.id, Math.round(seconds)).catch(() => {});
+            }
+            dwellStartRef.current = null;
+          }
+        }
+      },
+      { threshold: 0.6 } // 60% of card must be visible
+    );
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [item.id]);
+
   const creator = getCreator(item.category);
   const primaryImgUrl = getOptimizedImageUrl(item.thumbnail_url, item.image_url);
   const imgUrl = imgError ? getCategoryFallback(item.category) : primaryImgUrl;
+
+  // ── BUG FIX: use functional updater so we don't close over stale `liked` ──
+  const likedRef = useRef(liked);
+  useEffect(() => { likedRef.current = liked; }, [liked]);
 
   const handleLike = async () => {
     setLikeScale(0.7);
@@ -155,8 +190,10 @@ function PostCard({ item, onOpen, avatarImg }) {
       const r = await api.toggleLike(item.id);
       setLiked(r.liked); setLikesCount(r.likes);
     } catch {
-      setLiked(p => !p);
-      setLikesCount(p => liked ? p - 1 : p + 1);
+      // Use ref so we always read the CURRENT value, not stale closure value
+      const wasLiked = likedRef.current;
+      setLiked(!wasLiked);
+      setLikesCount(p => wasLiked ? Math.max(0, p - 1) : p + 1);
     }
   };
 
@@ -180,7 +217,7 @@ function PostCard({ item, onOpen, avatarImg }) {
   };
 
   return (
-    <article style={{
+    <article ref={cardRef} style={{
       background: "#000",
       borderBottom: "1px solid #262626",
       marginBottom: 0,
@@ -202,7 +239,12 @@ function PostCard({ item, onOpen, avatarImg }) {
               <span style={{ color: "#a8a8a8", fontSize: 13, lineHeight: 1 }}>•</span>
               <span style={{ fontSize: 13, color: "#a8a8a8" }}>2h</span>
             </div>
-            <span style={{ fontSize: 12, color: "#a8a8a8" }}>Suggested for you</span>
+            {/* Show real category as "Recommended because you liked {category}" */}
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 12, color: "#a8a8a8" }}>Based on your </span>
+              <span style={{ fontSize: 12, color: "#0095f6", fontWeight: 600 }}>{CATEGORY_ICONS[item.category] || "📷"} {item.category}</span>
+              <span style={{ fontSize: 12, color: "#a8a8a8" }}> interest</span>
+            </div>
           </div>
         </div>
         <button onClick={onOpen} style={{ background: "none", border: "none", cursor: "pointer", color: "#f5f5f5", padding: 4, display: "flex" }}>
@@ -445,7 +487,12 @@ function HomeFeedContent() {
             ? await api.getTrending(nextPage * 12, 12)
             : selectedCategory ? await api.getContent(selectedCategory, nextPage * 12, 12)
               : await api.getContent(null, nextPage * 12, 12);
-          setItems(p => [...p, ...more]);
+          // ── BUG FIX: Deduplicate by id before appending to prevent duplicate posts ──
+          setItems(prev => {
+            const existingIds = new Set(prev.map(i => i.id));
+            const fresh = more.filter(i => !existingIds.has(i.id));
+            return [...prev, ...fresh];
+          });
           setHasMore(more.length === 12);
         } catch { setHasMore(false); }
         finally { setLoadingMore(false); }
@@ -1299,13 +1346,48 @@ function HomeFeedContent() {
           {activePage === "home" && (
             <div className="hf-right-col">
               {profile?.user && (
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
                   <div style={{ width: 44, height: 44, borderRadius: "50%", background: "linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 16, fontWeight: 700, flexShrink: 0 }}>{userInitials}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: "#f5f5f5", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} onClick={() => router.push("/profile")}>{username}</div>
                     <div style={{ fontSize: 14, color: "#a8a8a8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{profile.user.name}</div>
                   </div>
                   <button onClick={handleLogout} style={{ background: "none", border: "none", cursor: "pointer", color: "#0095f6", fontSize: 12, fontWeight: 700, fontFamily: "inherit" }}>Switch</button>
+                </div>
+              )}
+
+              {/* ── Interest Algorithm Panel (Instagram-style) ── */}
+              {profile?.user && Object.keys(profile.user.interests || {}).length > 0 && (
+                <div style={{ background: "#111", border: "1px solid #262626", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#f5f5f5" }}>🧠 Your Interest Profile</span>
+                    <span style={{ fontSize: 11, color: "#a8a8a8" }}>How your feed is ranked</span>
+                  </div>
+                  {Object.entries(profile.user.interests)
+                    .sort(([, a], [, b]) => b - a)
+                    .slice(0, 5)
+                    .map(([cat, score]) => {
+                      const pct = Math.round(score * 100);
+                      const barColor = {
+                        "Nature": "#22c55e", "Technology": "#3b82f6", "Recipes": "#f97316",
+                        "Travel": "#a855f7", "Design": "#ec4899", "Artificial Intelligence": "#06b6d4",
+                        "Education": "#eab308", "Photography": "#6366f1", "Fitness": "#ef4444"
+                      }[cat] || "#0095f6";
+                      return (
+                        <div key={cat} style={{ marginBottom: 10 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span style={{ fontSize: 12, color: "#f5f5f5" }}>{CATEGORY_ICONS[cat]} {cat}</span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: barColor }}>{pct}%</span>
+                          </div>
+                          <div style={{ height: 4, background: "#262626", borderRadius: 2, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${pct}%`, background: barColor, borderRadius: 2, transition: "width 0.6s ease" }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  <p style={{ fontSize: 11, color: "#737373", margin: "10px 0 0", lineHeight: 1.5 }}>
+                    Interact with posts (like, save, watch) to refine your feed.
+                  </p>
                 </div>
               )}
 

@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { 
-  LayoutDashboard, Users, Image as ImageIcon, BarChart2, Plus, Edit2, Trash2, 
+import {
+  LayoutDashboard, Users, Image as ImageIcon, BarChart2, Plus, Edit2, Trash2,
   Search, Eye, Heart, Bookmark, Share2, Sparkles, X, ChevronRight, Settings, Zap,
   Play, RefreshCw, Activity, ShieldAlert, Cpu, Database, Server, Info, Terminal
 } from "lucide-react";
@@ -11,7 +11,7 @@ import { adminApi } from "@/utils/api";
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<"overview" | "users" | "content" | "monitor">("overview");
   const [mounted, setMounted] = useState(false);
-  
+
   // Data States
   const [kpis, setKpis] = useState<any>(null);
   const [trends, setTrends] = useState<any>(null);
@@ -21,12 +21,12 @@ export default function AdminDashboard() {
   const [categories, setCategories] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  
+
   // User Simulation States
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [inspectionData, setInspectionData] = useState<any>(null);
   const [simulatingEvent, setSimulatingEvent] = useState(false);
-  
+
   // Content Form Modal States
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingContentId, setEditingContentId] = useState<string | null>(null);
@@ -68,9 +68,9 @@ export default function AdminDashboard() {
     console.log("Pixora Reco-Lab: Refreshing simulator registries...");
     setErrorMsg(null);
     setLoading(true);
-    
+
     const failedEndpoints: string[] = [];
-    
+
     await Promise.all([
       adminApi.getKPIs()
         .then(data => {
@@ -121,9 +121,9 @@ export default function AdminDashboard() {
           failedEndpoints.push("Content Categories");
         })
     ]);
-    
+
     setLoading(false);
-    
+
     if (failedEndpoints.length > 0) {
       setErrorMsg(`Registry connection failed: ${failedEndpoints.join(", ")}. Ensure backend is listening at 127.0.0.1:8000.`);
     }
@@ -183,25 +183,40 @@ export default function AdminDashboard() {
   const handleTriggerSimulatedActivity = async (userId: string) => {
     if (simulatingEvent || !contentList.length) return;
     setSimulatingEvent(true);
-    
+
     try {
       const randomContentObj = contentList[Math.floor(Math.random() * contentList.length)];
       const API_BASE_URL = "http://127.0.0.1:8000";
       const dwellSeconds = Math.floor(Math.random() * 25) + 5; // 5-30 seconds
-      
-      await fetch(`${API_BASE_URL}/api/content/${randomContentObj.id}/watch`, {
+      const actionType = Math.random() < 0.35 ? "like" : "watch";
+
+      const res = await fetch(`${API_BASE_URL}/api/admin/simulate/activity`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dwell_time: dwellSeconds })
+        body: JSON.stringify({
+          user_id: userId,
+          content_id: randomContentObj.id,
+          action_type: actionType,
+          dwell_time: actionType === "watch" ? dwellSeconds : null
+        })
       });
-      
+
+      if (!res.ok) {
+        throw new Error(`Server returned status ${res.status}`);
+      }
+
       await loadAllData();
       if (selectedUserId === userId) {
         await handleInspectUser(userId);
       }
-      alert(`Simulation completed! Simulated a ${dwellSeconds}s WATCH of "${randomContentObj.title}" which updated system popularity scores.`);
+
+      const feedbackMsg = actionType === "watch"
+        ? `Simulated a ${dwellSeconds}s WATCH of "${randomContentObj.title}" (Category: ${randomContentObj.category})`
+        : `Simulated a LIKE of "${randomContentObj.title}" (Category: ${randomContentObj.category})`;
+      alert(`Simulation completed! ${feedbackMsg}`);
     } catch (err) {
       console.error("Simulation failed", err);
+      alert("Simulation failed to commit activity event.");
     } finally {
       setSimulatingEvent(false);
     }
@@ -306,7 +321,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const filteredContentList = contentList.filter(item => 
+  const filteredContentList = contentList.filter(item =>
     item.title.toLowerCase().includes(contentSearchQuery.toLowerCase()) ||
     item.category.toLowerCase().includes(contentSearchQuery.toLowerCase())
   );
@@ -337,16 +352,16 @@ export default function AdminDashboard() {
     const chartW = width - padding * 2;
     const chartH = height - padding * 2;
     const maxVal = Math.max(...data.map(d => d.users), 5);
-    
+
     const points = data.map((item, idx) => {
       const x = padding + (idx / (data.length - 1)) * chartW;
       const y = height - padding - (item.users / maxVal) * chartH;
       return { x, y, date: item.date, val: item.users };
     });
-    
+
     const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
     const areaD = pathD ? `${pathD} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z` : "";
-    
+
     return (
       <div className="w-full h-full relative select-none">
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
@@ -356,19 +371,19 @@ export default function AdminDashboard() {
               <stop offset="100%" stopColor="#bef200" stopOpacity={0.0} />
             </linearGradient>
           </defs>
-          
+
           {/* Grid lines */}
           {[0, 0.5, 1].map((r, i) => {
             const y = padding + r * chartH;
             return <line key={i} x1={padding} y1={y} x2={width - padding} y2={y} stroke="#1e1e2f" strokeWidth={1} strokeDasharray="3 3" />;
           })}
-          
+
           {/* Fill Area */}
           {areaD && <path d={areaD} fill="url(#neonGlowGrad)" />}
-          
+
           {/* Plot line */}
           {pathD && <path d={pathD} fill="none" stroke="#bef200" strokeWidth={2.5} />}
-          
+
           {/* Nodes */}
           {points.map((pt, i) => (
             <g key={i}>
@@ -408,11 +423,11 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex min-h-screen bg-[#050508] text-[#f0f0f5] antialiased font-sans">
-      
+
       {/* ══════════ SIDEBAR NAVIGATION ══════════ */}
       <aside className="w-64 border-r border-white/5 bg-zinc-950/60 backdrop-blur-xl p-6 flex flex-col justify-between hidden md:flex z-45 select-none">
         <div className="space-y-9">
-          
+
           {/* Logo Frame */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyber-purple via-cyber-pink to-primary flex items-center justify-center font-black text-black text-xl shadow-lg">
@@ -439,8 +454,8 @@ export default function AdminDashboard() {
                 key={link.id}
                 onClick={() => setActiveTab(link.id as any)}
                 className={`w-full flex items-center gap-3.5 px-4.5 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all border cursor-pointer ${
-                  activeTab === link.id 
-                    ? "bg-zinc-900 border-zinc-800 text-white shadow-lg" 
+                  activeTab === link.id
+                    ? "bg-zinc-900 border-zinc-800 text-white shadow-lg"
                     : "text-zinc-500 border-transparent hover:text-zinc-350 hover:bg-zinc-900/40"
                 }`}
               >
@@ -465,7 +480,7 @@ export default function AdminDashboard() {
 
       {/* ══════════ MAIN CONTENT PANEL ══════════ */}
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen p-6 sm:p-8 z-10 relative">
-        
+
         {/* Mobile Header Navigation */}
         <header className="flex justify-between items-center md:hidden mb-6 border-b border-white/5 pb-4 select-none">
           <span className="font-black text-xs uppercase tracking-widest text-primary font-display">Pixora Reco-Lab</span>
@@ -507,7 +522,7 @@ export default function AdminDashboard() {
                 <h1 className="text-lg font-black tracking-tight text-white font-display uppercase">Simulation Control Deck</h1>
                 <p className="text-xs text-zinc-500 mt-0.5 font-bold uppercase tracking-wider font-mono">Real-time category interactions & feed updates</p>
               </div>
-              <button 
+              <button
                 onClick={loadAllData}
                 className="p-2.5 rounded-2xl border border-white/5 bg-zinc-900/60 hover:bg-zinc-900 text-xs font-bold flex items-center gap-1.5 transition-all text-zinc-400 hover:text-zinc-200 cursor-pointer"
               >
@@ -537,7 +552,7 @@ export default function AdminDashboard() {
 
             {/* Neural Map & Activity Ticker */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
+
               {/* Curve chart */}
               <div className="glass-panel p-5 rounded-2xl flex flex-col justify-between lg:col-span-2 space-y-4">
                 <div className="flex justify-between items-center select-none">
@@ -624,18 +639,18 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
+
               {/* Target User List */}
               <div className="glass-panel p-5 rounded-2xl space-y-4 h-fit">
                 <h3 className="text-xs uppercase font-black tracking-widest text-zinc-500 font-display select-none">Simulator Target Profiles</h3>
                 <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1 no-scrollbar select-none">
                   {usersList.map((userObj) => (
-                    <div 
-                      key={userObj.user_id} 
+                    <div
+                      key={userObj.user_id}
                       onClick={() => handleInspectUser(userObj.user_id)}
                       className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex justify-between items-center ${
-                        selectedUserId === userObj.user_id 
-                          ? "bg-zinc-900 border-zinc-800 text-white" 
+                        selectedUserId === userObj.user_id
+                          ? "bg-zinc-900 border-zinc-800 text-white"
                           : "bg-zinc-950/40 border-white/5 text-zinc-400 hover:border-zinc-800"
                       }`}
                     >
@@ -659,14 +674,14 @@ export default function AdminDashboard() {
               <div className="glass-panel p-6 rounded-2xl lg:col-span-2 space-y-6">
                 {selectedUserId && inspectionData ? (
                   <div className="space-y-6">
-                    
+
                     {/* User Profile info */}
                     <div className="flex justify-between items-start border-b border-white/5 pb-5 select-none">
                       <div>
                         <h2 className="text-lg font-black text-zinc-200 uppercase font-display">{inspectionData.name}</h2>
                         <span className="text-[10px] font-mono text-zinc-500 font-bold block mt-0.5">UUID: {inspectionData.user_id}</span>
                       </div>
-                      
+
                       <button
                         onClick={() => handleTriggerSimulatedActivity(inspectionData.user_id)}
                         disabled={simulatingEvent}
@@ -681,21 +696,41 @@ export default function AdminDashboard() {
                     <div className="space-y-3 bg-zinc-950/40 p-4.5 rounded-2xl border border-white/5 select-none">
                       <h4 className="text-[10px] uppercase font-black tracking-widest text-zinc-500">User Interest DNA affinity</h4>
                       <div className="space-y-2">
-                        {Object.entries(inspectionData.interests).map(([cat, val]: any) => {
-                          const pct = Math.round(val * 100);
-                          return (
-                            <div key={cat} className="space-y-1">
-                              <div className="flex justify-between text-[11px] font-bold text-zinc-300">
-                                <span>{cat}</span>
-                                <span className="font-mono text-teal-400">{pct}% affinity</span>
+                        {inspectionData.interests_details && Object.entries(inspectionData.interests_details).length > 0 ? (
+                          Object.entries(inspectionData.interests_details).map(([cat, info]: any) => {
+                            const pct = Math.round(info.weight * 100);
+                            return (
+                              <div key={cat} className="space-y-1">
+                                <div className="flex justify-between text-[11px] font-bold text-zinc-300">
+                                  <span>{cat}</span>
+                                  <div className="flex gap-2 items-center font-mono">
+                                    <span className="text-[10px] text-zinc-500 font-normal">({info.likes} likes, {info.views} views)</span>
+                                    <span className="text-teal-400">{pct}% affinity</span>
+                                  </div>
+                                </div>
+                                <div className="w-full h-1.5 bg-zinc-950 rounded-full overflow-hidden border border-white/5">
+                                  <div style={{ width: `${pct}%` }} className="h-full bg-teal-500 rounded-full" />
+                                </div>
                               </div>
-                              <div className="w-full h-1.5 bg-zinc-950 rounded-full overflow-hidden border border-white/5">
-                                <div style={{ width: `${pct}%` }} className="h-full bg-teal-500 rounded-full" />
+                            );
+                          })
+                        ) : (
+                          Object.entries(inspectionData.interests).map(([cat, val]: any) => {
+                            const pct = Math.round(val * 100);
+                            return (
+                              <div key={cat} className="space-y-1">
+                                <div className="flex justify-between text-[11px] font-bold text-zinc-300">
+                                  <span>{cat}</span>
+                                  <span className="font-mono text-teal-400">{pct}% affinity</span>
+                                </div>
+                                <div className="w-full h-1.5 bg-zinc-950 rounded-full overflow-hidden border border-white/5">
+                                  <div style={{ width: `${pct}%` }} className="h-full bg-teal-500 rounded-full" />
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
-                        {Object.keys(inspectionData.interests).length === 0 && (
+                            );
+                          })
+                        )}
+                        {(!inspectionData.interests_details || Object.keys(inspectionData.interests_details).length === 0) && Object.keys(inspectionData.interests).length === 0 && (
                           <span className="text-[10.5px] text-zinc-650 block py-1 font-semibold">No DNA data. Register interests on feed client to construct interest affinities.</span>
                         )}
                       </div>
@@ -802,12 +837,12 @@ export default function AdminDashboard() {
             {/* Masonry image catalog */}
             <div className="columns-2 md:columns-4 lg:columns-5 gap-4 space-y-4">
               {filteredContentList.map((item) => (
-                <div 
+                <div
                   key={item.id}
                   className="break-inside-avoid bg-zinc-950/60 border border-white/5 hover:border-zinc-800 rounded-2xl overflow-hidden group relative flex flex-col shadow-sm transition-all"
                 >
                   <img src={item.image_url} alt={item.title} className="w-full object-cover max-h-56 bg-zinc-900 select-none pointer-events-none" />
-                  
+
                   {/* Info block */}
                   <div className="p-3.5 space-y-2 select-none">
                     <div className="flex gap-1.5 flex-wrap">
@@ -817,7 +852,7 @@ export default function AdminDashboard() {
                       )}
                     </div>
                     <h4 className="font-bold text-xs text-zinc-200 line-clamp-2 leading-relaxed">{item.title}</h4>
-                    
+
                     {/* Metrics */}
                     <div className="flex gap-3 text-[9px] text-zinc-500 font-bold font-mono pt-1">
                       <span className="flex items-center gap-1"><Eye className="w-3 h-3" /> {item.views}</span>
@@ -864,7 +899,7 @@ export default function AdminDashboard() {
 
             {/* Diagnostic parameters grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              
+
               {/* Convergence accuracy */}
               <div className="glass-panel p-5.5 rounded-2xl flex flex-col justify-between space-y-4">
                 <div>
@@ -1036,8 +1071,8 @@ export default function AdminDashboard() {
             <form onSubmit={handleIngestSubmit} className="p-6 space-y-4 select-none">
               {ingestMessage && (
                 <div className={`p-3 rounded-xl text-xs font-semibold ${
-                  ingestMessage.includes("Successfully") 
-                    ? "bg-emerald-950/20 border border-emerald-900/40 text-emerald-400" 
+                  ingestMessage.includes("Successfully")
+                    ? "bg-emerald-950/20 border border-emerald-900/40 text-emerald-400"
                     : "bg-rose-950/20 border border-rose-900/40 text-rose-400"
                 }`}>
                   {ingestMessage}
@@ -1124,8 +1159,8 @@ export default function AdminDashboard() {
             <form onSubmit={handleDriveImportSubmit} className="p-6 space-y-4 select-none">
               {driveImportMessage && (
                 <div className={`p-3 rounded-xl text-xs font-semibold ${
-                  driveImportMessage.includes("Successfully") 
-                    ? "bg-emerald-950/20 border border-emerald-900/40 text-emerald-400" 
+                  driveImportMessage.includes("Successfully")
+                    ? "bg-emerald-950/20 border border-emerald-900/40 text-emerald-400"
                     : "bg-rose-950/20 border border-rose-900/40 text-rose-400"
                 }`}>
                   {driveImportMessage}
@@ -1138,8 +1173,8 @@ export default function AdminDashboard() {
                   type="button"
                   onClick={() => setDriveImportType("folder")}
                   className={`py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
-                    driveImportType === "folder" 
-                      ? "bg-zinc-900 text-primary" 
+                    driveImportType === "folder"
+                      ? "bg-zinc-900 text-primary"
                       : "text-zinc-500 hover:text-zinc-350"
                   }`}
                 >
@@ -1149,8 +1184,8 @@ export default function AdminDashboard() {
                   type="button"
                   onClick={() => setDriveImportType("file")}
                   className={`py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
-                    driveImportType === "file" 
-                      ? "bg-zinc-900 text-primary" 
+                    driveImportType === "file"
+                      ? "bg-zinc-900 text-primary"
                       : "text-zinc-500 hover:text-zinc-350"
                   }`}
                 >
@@ -1170,7 +1205,7 @@ export default function AdminDashboard() {
                     className="w-full bg-zinc-900/40 border border-white/5 rounded-xl py-2.5 px-4 text-xs font-semibold focus:outline-none focus:border-zinc-700 placeholder-zinc-700 text-zinc-200"
                   />
                   <p className="text-[9px] text-zinc-500 leading-normal">Reads all images contained within the specified Google Drive folder.</p>
-                  
+
                   {/* Parent Ingestion */}
                   <div className="flex items-center gap-2 pt-2">
                     <input
@@ -1237,7 +1272,7 @@ export default function AdminDashboard() {
               {/* Google API credentials config */}
               <div className="border-t border-white/5 pt-3.5 mt-2">
                 <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block mb-2">GCP Cloud Credentials (Optional)</span>
-                
+
                 <div className="space-y-3">
                   <div className="space-y-1">
                     <div className="flex justify-between text-[8px] font-black uppercase text-zinc-500 mb-1">
@@ -1267,7 +1302,7 @@ export default function AdminDashboard() {
                     />
                   </div>
                 </div>
-                
+
                 <p className="text-[9px] text-zinc-500 mt-3 font-mono leading-normal bg-zinc-950/40 p-2.5 rounded-xl border border-white/5">
                   💡 Leave both fields blank to run in mock sandbox mode, simulating high-quality catalog items directly.
                 </p>
