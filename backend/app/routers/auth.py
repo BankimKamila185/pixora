@@ -167,3 +167,79 @@ async def get_me(current_user: Dict[str, Any] = Depends(get_current_user)):
         "followed_categories": current_user.get("followed_categories", []),
         "created_at": current_user.get("created_at") or datetime.utcnow()
     }
+
+from pydantic import BaseModel
+
+class GoogleAuthInput(BaseModel):
+    id_token: str
+    email: Optional[str] = None
+    name: Optional[str] = None
+
+@router.post("/google", response_model=Token, dependencies=[Depends(check_rate_limit)])
+async def google_auth(data: GoogleAuthInput):
+    email = data.email
+    name = data.name
+    
+    # Verify Google Token if it is not a mock token
+    if not data.id_token.startswith("mock_"):
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                res = await client.get(
+                    f"https://oauth2.googleapis.com/tokeninfo?id_token={data.id_token}",
+                    timeout=5.0
+                )
+                if res.status_code == 200:
+                    info = res.json()
+                    email = info.get("email")
+                    name = info.get("name") or info.get("given_name") or name
+                else:
+                    logger.warning(f"Google tokeninfo returned status {res.status_code}: {res.text}")
+                    if not email:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Invalid Google token"
+                        )
+        except Exception as e:
+            logger.error(f"Error validating Google token: {e}")
+            if not email:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Failed to verify Google token: {str(e)}"
+                )
+
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email is required for Google authentication"
+        )
+        
+    users_col = get_collection("users")
+    user = await users_col.find_one({"email": email})
+    
+    if not user:
+        # Sign up: Create new user
+        user_id = str(uuid.uuid4())
+        password_hash = hash_password(str(uuid.uuid4()))
+        
+        user = {
+            "_id": user_id,
+            "name": name or email.split("@")[0],
+            "email": email,
+            "password_hash": password_hash,
+            "interests": {},
+            "followed_categories": [],
+            "created_at": datetime.utcnow()
+        }
+        await users_col.insert_one(user)
+        logger.info(f"Created new user via Google Sign-In: {email}")
+    else:
+        # Make sure user has name if they didn't have one
+        if name and not user.get("name"):
+            await users_col.update_one({"_id": user["_id"]}, {"$set": {"name": name}})
+            user["name"] = name
+        logger.info(f"Logged in existing user via Google Sign-In: {email}")
+        
+    access_token = create_access_token(data={"sub": user["_id"]})
+    return {"access_token": access_token, "token_type": "bearer"}
+

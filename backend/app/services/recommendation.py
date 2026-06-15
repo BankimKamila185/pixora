@@ -13,59 +13,67 @@ VALID_CATEGORIES = [
 
 INTERACTION_WEIGHTS = {
     "view": 1.0,
-    "like": 3.0,
-    "save": 5.0,
-    "share": 2.0,
-    "comment": 4.0,       # High explicit engagement signal
-    "watch": 1.5,         # Dwell time weight
-    "unlike": -3.0,
-    "unsave": -5.0
+    "like": 5.0,      # Raised: like is a strong positive signal
+    "save": 8.0,      # Raised: save is the strongest signal
+    "share": 3.0,
+    "comment": 6.0,   # High explicit engagement
+    "watch": 1.5,
+    "unlike": -5.0,
+    "unsave": -8.0
 }
 
 async def update_user_interest_profile(user_id: str):
     """
-    Recalculates the user's interest profile based on their interactions
-    and followed categories, then updates the user document in MongoDB.
+    Recalculates the user's interest profile based on their interactions.
+    Strong signals (like, save, comment) heavily boost a category.
     """
     users_col = get_collection("users")
     interactions_col = get_collection("interactions")
     content_col = get_collection("content")
     
-    # 1. Fetch user
     user_doc = await users_col.find_one({"_id": user_id})
     if not user_doc:
         return
         
     followed = user_doc.get("followed_categories", [])
     
-    # Initialize category scores
+    # Initialize — followed categories get a baseline boost
     cat_scores = {cat: 0.0 for cat in VALID_CATEGORIES}
-    
-    # Base weight for followed categories
     for cat in followed:
         if cat in cat_scores:
-            cat_scores[cat] += 10.0
+            cat_scores[cat] += 15.0  # Stronger baseline for followed categories
             
-    # 2. Fetch last 100 interactions for the user
-    cursor = interactions_col.find({"userId": user_id}).sort("timestamp", -1).limit(100)
-    interactions = await cursor.to_list(length=100)
+    # Fetch last 200 interactions (more history = better personalization)
+    cursor = interactions_col.find({"userId": user_id}).sort("timestamp", -1).limit(200)
+    interactions = await cursor.to_list(length=200)
     
-    # Fetch content details for these interactions to know their categories
     content_ids = [i["contentId"] for i in interactions]
     content_docs = await content_col.find({"_id": {"$in": content_ids}}).to_list(length=len(content_ids))
     content_map = {c["_id"]: c for c in content_docs}
     
-    # Aggregate interaction weights
+    # Apply recency decay to interactions — recent likes matter more
+    now = datetime.utcnow()
     for interact in interactions:
         c_id = interact["contentId"]
         action = interact["actionType"]
         weight = INTERACTION_WEIGHTS.get(action, 0.0)
         
-        # Integrate watch history / dwell time
-        # Scale view interactions by duration of view (if logged in database)
+        # Recency decay on interaction: recent interactions count more
+        ts = interact.get("timestamp", now)
+        if isinstance(ts, str):
+            try:
+                ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except Exception:
+                ts = now
+        age_hours = max(0.0, (now - ts).total_seconds() / 3600.0)
+        # Decay: full weight in first 24h, halved at 72h, quartered at 168h (1 week)
+        import math
+        recency_multiplier = 1.0 / (1.0 + math.log1p(age_hours / 24.0))
+        weight *= recency_multiplier
+        
+        # Dwell time scaling for view actions
         dwell_time = interact.get("dwell_time") or interact.get("dwellTime") or 0.0
         if action == "view" and dwell_time > 0:
-            import math
             weight = weight * (1.0 + math.log1p(dwell_time))
             
         content_item = content_map.get(c_id)
@@ -78,16 +86,14 @@ async def update_user_interest_profile(user_id: str):
     for cat in cat_scores:
         cat_scores[cat] = max(0.0, cat_scores[cat])
         
-    # 3. Normalize to sum to 1.0 (percentages)
+    # Normalize to sum to 1.0
     total_score = sum(cat_scores.values())
     interests = {}
     if total_score > 0:
         interests = {cat: round(score / total_score, 4) for cat, score in cat_scores.items() if score > 0}
     else:
-        # Default even weights if no interaction or follow
         interests = {}
         
-    # Update DB
     await users_col.update_one(
         {"_id": user_id},
         {"$set": {"interests": interests}}
@@ -98,81 +104,124 @@ async def update_user_interest_profile(user_id: str):
 
 async def get_personalized_recommendations(user_id: Optional[str], limit: int = 20, skip: int = 0) -> List[Dict[str, Any]]:
     """
-    Computes personalized recommendation scores for all content and returns sorted items.
-    Formula: Score = (0.5 * InterestMatch) + (0.3 * Popularity) + (0.2 * Recency)
+    Instagram-style personalized feed:
+    - User's interest profile drives HOW MANY items from each category appear
+    - 60% interest in Tech → ~60% of the feed is Tech
+    - Within each category, items are ranked by recency + popularity
+    - New users (no interactions) get a diversity-first feed
+    
+    Formula per item: score = (0.60 * interest) + (0.25 * popularity) + (0.12 * recency) + (0.03 * noise)
     """
     content_col = get_collection("content")
     users_col = get_collection("users")
     
-    # Fetch all content
-    # For a production app, we would use a two-stage system (retrieval then ranking).
-    # Since we are implementing a demonstration system, we rank the candidate pool in-memory.
-    all_content = await content_col.find({}).to_list(length=1000)
+    all_content = await content_col.find({}).to_list(length=2000)
     if not all_content:
         return []
         
-    # Get user interests
+    # Load user interests
     user_interests = {}
+    has_interactions = False
     if user_id:
         user_doc = await users_col.find_one({"_id": user_id})
         if user_doc:
             user_interests = user_doc.get("interests", {})
-            
-    # Calculate min-max popularity bounds for normalization
-    # Raw Popularity = views * 1 + likes * 3 + saves * 5 + shares * 2 + comments * 4
+            has_interactions = bool(user_interests)
+    
+    # ── New / No-interaction user: return diversified feed (same as guest) ──
+    if not has_interactions:
+        import random
+        from collections import defaultdict
+        by_cat = defaultdict(list)
+        for item in all_content:
+            by_cat[item.get("category", "Other")].append(item)
+        for cat in by_cat:
+            by_cat[cat].sort(key=lambda x: (x.get("likes", 0) * 3 + x.get("saves", 0) * 5 + x.get("views", 0)), reverse=True)
+        cats = list(by_cat.keys())
+        random.shuffle(cats)
+        interleaved = []
+        max_r = max(len(v) for v in by_cat.values()) if by_cat else 0
+        for r in range(max_r):
+            for cat in cats:
+                if r < len(by_cat[cat]):
+                    interleaved.append(by_cat[cat][r])
+        return interleaved[skip:skip + limit]
+
+    # ── Logged-in user with interaction history ──
+    import random
+    from collections import defaultdict
+    now = datetime.utcnow()
+
+    # Score every item
     raw_pops = []
     for c in all_content:
-        views = c.get("views", 0)
-        likes = c.get("likes", 0)
-        saves = c.get("saves", 0)
-        shares = c.get("shares", 0)
-        comments = c.get("comments", 0)
-        raw_pop = (views * 1.0) + (likes * 3.0) + (saves * 5.0) + (shares * 2.0) + (comments * 4.0)
+        raw_pop = (c.get("views", 0) * 1.0) + (c.get("likes", 0) * 3.0) + \
+                  (c.get("saves", 0) * 5.0) + (c.get("shares", 0) * 2.0)
         c["_raw_pop"] = raw_pop
         raw_pops.append(raw_pop)
-        
-    min_pop = min(raw_pops) if raw_pops else 0
-    max_pop = max(raw_pops) if raw_pops else 0
-    pop_range = max_pop - min_pop
-    if pop_range == 0:
-        pop_range = 1.0
-        
-    now = datetime.utcnow()
-    ranked_content = []
     
+    pop_min = min(raw_pops) if raw_pops else 0
+    pop_max = max(raw_pops) if raw_pops else 0
+    pop_range = max(pop_max - pop_min, 1.0)
+
     for c in all_content:
-        # 1. Interest Match (0.0 to 1.0)
-        category = c.get("category")
-        interest_match = user_interests.get(category, 0.0)
-        
-        # 2. Popularity (0.0 to 1.0)
-        popularity = (c["_raw_pop"] - min_pop) / pop_range
-        
-        # 3. Recency (0.0 to 1.0)
+        cat = c.get("category")
+        interest = user_interests.get(cat, 0.0)
+        popularity = (c["_raw_pop"] - pop_min) / pop_range
+
         created_at = c.get("created_at") or now
         if isinstance(created_at, str):
             try:
                 created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
             except Exception:
                 created_at = now
-        age_in_days = (now - created_at).total_seconds() / 86400.0
-        recency = 1.0 / (1.0 + max(0.0, age_in_days))
-        
-        # Calculate final score
-        score = (0.5 * interest_match) + (0.3 * popularity) + (0.2 * recency)
-        
-        # Store for dashboard inspection debugging
-        c["_rec_score"] = round(score, 4)
-        c["_score_breakdown"] = {
-            "interest_match": round(0.5 * interest_match, 4),
-            "popularity": round(0.3 * popularity, 4),
-            "recency": round(0.2 * recency, 4)
-        }
-        ranked_content.append(c)
-        
-    # Sort by recommendation score descending
-    ranked_content = sorted(ranked_content, key=lambda x: x["_rec_score"], reverse=True)
+        age_days = max(0.0, (now - created_at).total_seconds() / 86400.0)
+        recency = 1.0 / (1.0 + age_days)
+
+        noise = random.uniform(0.0, 1.0)
+        # Instagram-style: interest is the DOMINANT signal
+        c["_rec_score"] = (0.60 * interest) + (0.25 * popularity) + (0.12 * recency) + (0.03 * noise)
+
+    # ── Interest-proportional slot allocation ──
+    # If user is 60% Tech, allocate ~60% of the page to Tech items
+    # This is how Instagram/TikTok actually work
+    
+    # Group by category, sorted by score within each group
+    by_cat = defaultdict(list)
+    for c in all_content:
+        by_cat[c.get("category", "Other")].append(c)
+    for cat in by_cat:
+        by_cat[cat].sort(key=lambda x: x["_rec_score"], reverse=True)
+
+    # Calculate slot allocation per category based on user interest
+    total_interest = sum(user_interests.get(cat, 0.0) for cat in by_cat)
+    
+    # Guarantee at least 1 slot for ALL categories so feed isn't 100% one category
+    # Max any single category can take is 70% of the page
+    cat_slots: Dict[str, int] = {}
+    allocated = 0
+    
+    # Full pool size we're drawing from (pagination-aware)
+    pool_size = limit + skip  # need enough items to skip + return limit
+    
+    for cat in by_cat:
+        if total_interest > 0:
+            interest_ratio = user_interests.get(cat, 0.0) / total_interest
+            # Cap: dominant category gets at most 70% of slots, min 1 slot
+            slots = max(1, round(interest_ratio * pool_size * 1.3))
+            slots = min(slots, int(pool_size * 0.70))
+        else:
+            slots = max(1, pool_size // max(1, len(by_cat)))
+        cat_slots[cat] = slots
+    
+    # Build the personalized pool by taking `slots` best items from each category
+    pool = []
+    for cat, items_in_cat in by_cat.items():
+        slots = cat_slots.get(cat, 1)
+        pool.extend(items_in_cat[:slots])
+    
+    # Final sort by score — items with high interest AND high popularity win
+    pool.sort(key=lambda x: x["_rec_score"], reverse=True)
     
     # Paginate
-    paginated = ranked_content[skip:skip+limit]
-    return paginated
+    return pool[skip:skip + limit]

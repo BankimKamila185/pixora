@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { 
   LayoutDashboard, Users, Image as ImageIcon, BarChart2, Plus, Edit2, Trash2, 
   Search, Eye, Heart, Bookmark, Share2, Sparkles, X, ChevronRight, Settings, Zap,
-  Play, RefreshCw, Activity, ShieldAlert, Cpu
+  Play, RefreshCw, Activity, ShieldAlert, Cpu, Database, Server, Info, Terminal
 } from "lucide-react";
 import { adminApi } from "@/utils/api";
 
@@ -185,32 +185,10 @@ export default function AdminDashboard() {
     setSimulatingEvent(true);
     
     try {
-      // Pick a random content item
       const randomContentObj = contentList[Math.floor(Math.random() * contentList.length)];
-      const actions = ["view", "like", "save", "watch"];
-      const actionType = actions[Math.floor(Math.random() * actions.length)];
-      
-      // Call corresponding endpoints
-      // In production, we'd log this relative to the user token. For simulation, 
-      // we can trigger custom fetch queries using curl/headers or mock endpoints if supported.
-      // For this system, we can post a view or comment using the backend APIs!
-      // To simulate, we'll fetch `/api/content/{id}/watch` or `/api/content/{id}/like` directly
-      // using the userId as a query param or request header if supported.
-      // Let's trigger a POST to `/api/content/{id}/watch` or similar:
-      // Note: backend expects auth header or optional user. To mock it properly,
-      // we'll send a mock request or trigger a background event on the backend.
-      // Let's just POST a comment on behalf of the user to see the counts shift!
       const API_BASE_URL = "http://127.0.0.1:8000";
-      
-      // Let's send a post watch interaction to simulate dwell time
       const dwellSeconds = Math.floor(Math.random() * 25) + 5; // 5-30 seconds
       
-      // We will perform a watch tracking request. In this prototype admin simulator,
-      // we can append simulated logs to the user interest profile.
-      // Let's call the public watch endpoint. Since it parses get_optional_current_user,
-      // if we append a simulated token or authorization bearer with user_id, it will match!
-      // (The jwt encode uses settings.JWT_SECRET_KEY. For simulation, since we don't have secret key,
-      // we can simply perform the action to register content popularity views directly!)
       await fetch(`${API_BASE_URL}/api/content/${randomContentObj.id}/watch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -333,7 +311,6 @@ export default function AdminDashboard() {
     item.category.toLowerCase().includes(contentSearchQuery.toLowerCase())
   );
 
-  // Compile a list of recent activities across all users for the live activity feed
   const getCompiledActivityFeed = () => {
     const feed: any[] = [];
     usersList.forEach(u => {
@@ -348,16 +325,15 @@ export default function AdminDashboard() {
         });
       }
     });
-    // Sort by timestamp desc
     return feed.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 8);
   };
 
-  // Custom Chart Builders
+  // Modern SVG Line Chart Builder
   const renderLineChart = (data: any[]) => {
     if (!data || data.length === 0) return null;
     const width = 500;
     const height = 180;
-    const padding = 20;
+    const padding = 24;
     const chartW = width - padding * 2;
     const chartH = height - padding * 2;
     const maxVal = Math.max(...data.map(d => d.users), 5);
@@ -372,28 +348,32 @@ export default function AdminDashboard() {
     const areaD = pathD ? `${pathD} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z` : "";
     
     return (
-      <div className="w-full h-full relative">
+      <div className="w-full h-full relative select-none">
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
           <defs>
-            <linearGradient id="glowGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
-              <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.0} />
+            <linearGradient id="neonGlowGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#bef200" stopOpacity={0.25} />
+              <stop offset="100%" stopColor="#bef200" stopOpacity={0.0} />
             </linearGradient>
           </defs>
+          
           {/* Grid lines */}
           {[0, 0.5, 1].map((r, i) => {
             const y = padding + r * chartH;
-            return <line key={i} x1={padding} y1={y} x2={width - padding} y2={y} stroke="#27272a" strokeWidth={1} strokeDasharray="3 3" />;
+            return <line key={i} x1={padding} y1={y} x2={width - padding} y2={y} stroke="#1e1e2f" strokeWidth={1} strokeDasharray="3 3" />;
           })}
+          
           {/* Fill Area */}
-          {areaD && <path d={areaD} fill="url(#glowGrad)" />}
+          {areaD && <path d={areaD} fill="url(#neonGlowGrad)" />}
+          
           {/* Plot line */}
-          {pathD && <path d={pathD} fill="none" stroke="#8b5cf6" strokeWidth={2} />}
+          {pathD && <path d={pathD} fill="none" stroke="#bef200" strokeWidth={2.5} />}
+          
           {/* Nodes */}
           {points.map((pt, i) => (
             <g key={i}>
-              <circle cx={pt.x} cy={pt.y} r={3.5} fill="#8b5cf6" className="hover:scale-150 transition-transform" />
-              <text x={pt.x} y={height - 2} fill="#71717a" fontSize={8} textAnchor="middle" className="font-mono">{pt.date}</text>
+              <circle cx={pt.x} cy={pt.y} r={4} fill="#bef200" className="cursor-pointer hover:r-6 transition-all" />
+              <text x={pt.x} y={height - 4} fill="#64748b" fontSize={7.5} fontWeight="bold" textAnchor="middle" className="font-mono">{pt.date}</text>
             </g>
           ))}
         </svg>
@@ -401,23 +381,24 @@ export default function AdminDashboard() {
     );
   };
 
+  // Modern Bar Chart Builder
   const renderBarChart = (data: any[]) => {
     if (!data || data.length === 0) return null;
     const maxVal = Math.max(...data.flatMap(d => [d.views, d.likes, d.saves]), 10);
     return (
-      <div className="flex h-full items-end justify-between gap-1.5 min-h-[140px] pb-1 border-b border-zinc-800">
+      <div className="flex h-full items-end justify-between gap-2 min-h-[140px] pb-2 border-b border-zinc-900 select-none">
         {data.map((item, idx) => {
           const viewPct = (item.views / maxVal) * 100;
           const likePct = (item.likes / maxVal) * 100;
           const savePct = (item.saves / maxVal) * 100;
           return (
-            <div key={idx} className="flex-1 flex flex-col items-center">
-              <div className="w-full flex items-end justify-center gap-0.5 h-[120px]">
-                <div style={{ height: `${viewPct}%` }} className="w-1.5 bg-blue-500 rounded-t-sm" title={`Views: ${item.views}`} />
-                <div style={{ height: `${likePct}%` }} className="w-1.5 bg-rose-500 rounded-t-sm" title={`Likes: ${item.likes}`} />
-                <div style={{ height: `${savePct}%` }} className="w-1.5 bg-amber-500 rounded-t-sm" title={`Saves: ${item.saves}`} />
+            <div key={idx} className="flex-1 flex flex-col items-center group">
+              <div className="w-full flex items-end justify-center gap-0.5 h-[120px] relative">
+                <div style={{ height: `${viewPct}%` }} className="w-1.5 bg-blue-500 rounded-t-sm transition-all" title={`Views: ${item.views}`} />
+                <div style={{ height: `${likePct}%` }} className="w-1.5 bg-rose-500 rounded-t-sm transition-all" title={`Likes: ${item.likes}`} />
+                <div style={{ height: `${savePct}%` }} className="w-1.5 bg-amber-500 rounded-t-sm transition-all" title={`Saves: ${item.saves}`} />
               </div>
-              <span className="text-[8.5px] text-zinc-500 font-mono mt-1">{item.date}</span>
+              <span className="text-[8px] text-zinc-500 font-bold font-mono mt-1.5">{item.date}</span>
             </div>
           );
         })}
@@ -426,19 +407,21 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#070709] text-[#e4e4e7] antialiased">
-      {/* SIDEBAR NAVIGATION CONTROL */}
-      <aside className="w-64 border-r border-zinc-900 bg-zinc-950/60 backdrop-blur-md p-6 flex flex-col justify-between hidden md:flex">
+    <div className="flex min-h-screen bg-[#050508] text-[#f0f0f5] antialiased font-sans">
+      
+      {/* ══════════ SIDEBAR NAVIGATION ══════════ */}
+      <aside className="w-64 border-r border-white/5 bg-zinc-950/60 backdrop-blur-xl p-6 flex flex-col justify-between hidden md:flex z-45 select-none">
         <div className="space-y-9">
+          
           {/* Logo Frame */}
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-rose-600 flex items-center justify-center font-black text-white text-lg shadow-[0_0_15px_rgba(139,92,246,0.3)]">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyber-purple via-cyber-pink to-primary flex items-center justify-center font-black text-black text-xl shadow-lg">
               P
             </div>
             <div>
-              <span className="font-extrabold text-sm tracking-wide block bg-gradient-to-r from-purple-400 to-rose-400 bg-clip-text text-transparent">PIXORA RECO-LAB</span>
-              <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-ping" />
+              <span className="font-black text-sm tracking-tight block text-white font-display">PIXORA RECO-LAB</span>
+              <span className="text-[9px] uppercase font-black text-zinc-500 tracking-widest flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
                 Control Room
               </span>
             </div>
@@ -446,77 +429,53 @@ export default function AdminDashboard() {
 
           {/* Links */}
           <nav className="space-y-1.5">
-            <button
-              onClick={() => setActiveTab("overview")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border cursor-pointer ${
-                activeTab === "overview" 
-                  ? "bg-purple-950/20 text-purple-400 border-purple-500/30 shadow-[inset_0_0_8px_rgba(139,92,246,0.1)]" 
-                  : "text-zinc-500 border-transparent hover:text-zinc-300 hover:bg-zinc-900/50"
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              Control Deck
-            </button>
-            <button
-              onClick={() => setActiveTab("users")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border cursor-pointer ${
-                activeTab === "users" 
-                  ? "bg-purple-950/20 text-purple-400 border-purple-500/30 shadow-[inset_0_0_8px_rgba(139,92,246,0.1)]" 
-                  : "text-zinc-500 border-transparent hover:text-zinc-300 hover:bg-zinc-900/50"
-              }`}
-            >
-              <Cpu className="w-4 h-4" />
-              User Simulator
-            </button>
-            <button
-              onClick={() => setActiveTab("content")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border cursor-pointer ${
-                activeTab === "content" 
-                  ? "bg-purple-950/20 text-purple-400 border-purple-500/30 shadow-[inset_0_0_8px_rgba(139,92,246,0.1)]" 
-                  : "text-zinc-500 border-transparent hover:text-zinc-300 hover:bg-zinc-900/50"
-              }`}
-            >
-              <ImageIcon className="w-4 h-4" />
-              Catalog Laboratory
-            </button>
-            <button
-              onClick={() => setActiveTab("monitor")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border cursor-pointer ${
-                activeTab === "monitor" 
-                  ? "bg-purple-950/20 text-purple-400 border-purple-500/30 shadow-[inset_0_0_8px_rgba(139,92,246,0.1)]" 
-                  : "text-zinc-500 border-transparent hover:text-zinc-300 hover:bg-zinc-900/50"
-              }`}
-            >
-              <BarChart2 className="w-4 h-4" />
-              Diagnostics
-            </button>
+            {[
+              { id: "overview", label: "Control Deck", icon: <LayoutDashboard className="w-4 h-4" /> },
+              { id: "users", label: "User Simulator", icon: <Cpu className="w-4 h-4" /> },
+              { id: "content", label: "Catalog Lab", icon: <ImageIcon className="w-4 h-4" /> },
+              { id: "monitor", label: "Diagnostics", icon: <BarChart2 className="w-4 h-4" /> },
+            ].map((link) => (
+              <button
+                key={link.id}
+                onClick={() => setActiveTab(link.id as any)}
+                className={`w-full flex items-center gap-3.5 px-4.5 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all border cursor-pointer ${
+                  activeTab === link.id 
+                    ? "bg-zinc-900 border-zinc-800 text-white shadow-lg" 
+                    : "text-zinc-500 border-transparent hover:text-zinc-350 hover:bg-zinc-900/40"
+                }`}
+              >
+                {link.icon}
+                {link.label}
+              </button>
+            ))}
           </nav>
         </div>
 
-        {/* Console status */}
-        <div className="p-3 bg-zinc-950 border border-zinc-900 rounded-xl text-[10px] text-zinc-500 flex items-center justify-between">
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
+        {/* Telemetry Status Console */}
+        <div className="p-3 bg-zinc-900/60 border border-white/5 rounded-2xl text-[10px] text-zinc-500 flex items-center justify-between">
+          <span className="flex items-center gap-1.5 font-bold">
+            <Server className="w-3.5 h-3.5 text-primary" />
             Simulation Active
           </span>
-          <button onClick={loadAllData} className="hover:text-zinc-300">
+          <button onClick={loadAllData} className="hover:text-zinc-300 transition-colors cursor-pointer">
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
         </div>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen p-6 sm:p-8">
-        {/* Mobile Header Nav */}
-        <header className="flex justify-between items-center md:hidden mb-6 border-b border-zinc-900 pb-4">
-          <span className="font-black text-xs uppercase tracking-widest text-purple-400">Pixora Reco-Lab</span>
+      {/* ══════════ MAIN CONTENT PANEL ══════════ */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen p-6 sm:p-8 z-10 relative">
+        
+        {/* Mobile Header Navigation */}
+        <header className="flex justify-between items-center md:hidden mb-6 border-b border-white/5 pb-4 select-none">
+          <span className="font-black text-xs uppercase tracking-widest text-primary font-display">Pixora Reco-Lab</span>
           <div className="flex gap-1.5">
             {["overview", "users", "content", "monitor"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab as any)}
-                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border cursor-pointer ${
-                  activeTab === tab ? "bg-purple-950/30 text-purple-400 border-purple-500/40" : "bg-zinc-950 text-zinc-500 border-transparent"
+                className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wide border cursor-pointer transition-colors ${
+                  activeTab === tab ? "bg-zinc-900 text-white border-zinc-800" : "bg-transparent text-zinc-500 border-transparent"
                 }`}
               >
                 {tab === "monitor" ? "Diag" : tab}
@@ -525,35 +484,35 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        {/* Diagnostic connection banner */}
+        {/* Error notification banner */}
         {errorMsg && (
           <div className="mb-6 p-4 bg-rose-950/20 border border-rose-900/30 rounded-2xl text-xs text-rose-400 flex justify-between items-center shadow-lg backdrop-blur-md">
             <span className="flex items-center gap-2">
               <ShieldAlert className="w-4.5 h-4.5 text-rose-500 flex-shrink-0" />
               <span>{errorMsg}</span>
             </span>
-            <button onClick={() => setErrorMsg(null)} className="text-rose-300 hover:text-white font-bold px-2 py-1 rounded bg-rose-900/40 text-[10px]">
+            <button onClick={() => setErrorMsg(null)} className="text-rose-300 hover:text-white font-bold px-3 py-1.5 rounded-lg bg-rose-900/40 text-[10px] cursor-pointer">
               Dismiss
             </button>
           </div>
         )}
 
-        {/* --- TABS RENDERING --- */}
+        {/* ─── TABS CONTENT ─── */}
 
-        {/* 1. CONTROL DECK (Overview) */}
+        {/* 1. CONTROL DECK OVERVIEW */}
         {mounted && activeTab === "overview" && (
-          <div className="space-y-8">
-            <div className="flex justify-between items-end">
+          <div className="space-y-6 animate-fade-in">
+            <div className="flex justify-between items-end select-none">
               <div>
-                <h1 className="text-xl font-extrabold tracking-tight text-zinc-100">SIMULATION CONTROL DECK</h1>
-                <p className="text-xs text-zinc-500 mt-0.5 font-mono uppercase tracking-wider">Real-time category interactions & feed updates</p>
+                <h1 className="text-lg font-black tracking-tight text-white font-display uppercase">Simulation Control Deck</h1>
+                <p className="text-xs text-zinc-500 mt-0.5 font-bold uppercase tracking-wider font-mono">Real-time category interactions & feed updates</p>
               </div>
               <button 
                 onClick={loadAllData}
-                className="p-2.5 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900 text-xs font-bold flex items-center gap-1.5 transition-all text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                className="p-2.5 rounded-2xl border border-white/5 bg-zinc-900/60 hover:bg-zinc-900 text-xs font-bold flex items-center gap-1.5 transition-all text-zinc-400 hover:text-zinc-200 cursor-pointer"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                Reload Deck
+                Reload Registry
               </button>
             </div>
 
@@ -561,31 +520,32 @@ export default function AdminDashboard() {
             {kpis && (
               <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
                 {[
-                  { label: "Simulator Users", val: kpis.total_users, glow: "shadow-[0_0_15px_rgba(59,130,246,0.1)] border-blue-900/30 text-blue-400" },
-                  { label: "Catalog Assets", val: kpis.total_content, glow: "shadow-[0_0_15px_rgba(139,92,246,0.1)] border-purple-900/30 text-purple-400" },
-                  { label: "Views Tracked", val: kpis.total_views, glow: "shadow-[0_0_15px_rgba(16,185,129,0.1)] border-emerald-900/30 text-emerald-400" },
-                  { label: "Likes Injected", val: kpis.total_likes, glow: "shadow-[0_0_15px_rgba(244,63,94,0.1)] border-rose-900/30 text-rose-400" },
-                  { label: "Saves Committed", val: kpis.total_saves, glow: "shadow-[0_0_15px_rgba(245,158,11,0.1)] border-amber-900/30 text-amber-400" },
-                  { label: "Shares Triggered", val: kpis.total_shares, glow: "shadow-[0_0_15px_rgba(236,72,153,0.1)] border-pink-900/30 text-pink-400" }
+                  { label: "Simulator Users", val: kpis.total_users, color: "text-blue-400 border-blue-950/40" },
+                  { label: "Catalog Assets", val: kpis.total_content, color: "text-purple-400 border-purple-950/40" },
+                  { label: "Views Tracked", val: kpis.total_views, color: "text-emerald-400 border-emerald-950/40" },
+                  { label: "Likes Injected", val: kpis.total_likes, color: "text-rose-400 border-rose-950/40" },
+                  { label: "Saves Committed", val: kpis.total_saves, color: "text-amber-400 border-amber-950/40" },
+                  { label: "Shares Triggered", val: kpis.total_shares, color: "text-pink-400 border-pink-950/40" }
                 ].map((item, idx) => (
-                  <div key={idx} className={`bg-zinc-900/30 border p-4.5 rounded-2xl flex flex-col justify-between backdrop-blur-sm transition-all hover:scale-102 hover:bg-zinc-900/50 ${item.glow}`}>
-                    <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest">{item.label}</span>
-                    <span className="text-2xl font-black mt-3 tracking-tight font-mono">{item.val.toLocaleString()}</span>
+                  <div key={idx} className={`glass-panel border p-4.5 rounded-2xl flex flex-col justify-between transition-transform hover:scale-[1.02] ${item.color}`}>
+                    <span className="text-[9px] uppercase font-black text-zinc-500 tracking-widest">{item.label}</span>
+                    <span className="text-2xl font-black mt-3.5 tracking-tight font-mono">{item.val.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Neural Map & Live Log Column */}
+            {/* Neural Map & Activity Ticker */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Custom SVG Line Chart */}
-              <div className="bg-zinc-900/30 border border-zinc-800/80 p-5 rounded-2xl flex flex-col justify-between lg:col-span-2 space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-xs uppercase font-extrabold tracking-widest text-zinc-400 flex items-center gap-1.5">
-                    <Activity className="w-3.5 h-3.5 text-purple-400" />
+              
+              {/* Curve chart */}
+              <div className="glass-panel p-5 rounded-2xl flex flex-col justify-between lg:col-span-2 space-y-4">
+                <div className="flex justify-between items-center select-none">
+                  <h3 className="text-xs uppercase font-black tracking-widest text-zinc-400 flex items-center gap-2 font-display">
+                    <Activity className="w-4 h-4 text-primary animate-pulse" />
                     Growth Simulation Curve
                   </h3>
-                  <span className="text-[10px] text-zinc-500 font-mono">Last 7 Days</span>
+                  <span className="text-[10px] text-zinc-500 font-bold font-mono">Telemetry Line</span>
                 </div>
                 {trends ? (
                   <div className="h-44">{renderLineChart(trends.user_growth)}</div>
@@ -594,57 +554,57 @@ export default function AdminDashboard() {
                 )}
               </div>
 
-              {/* Live activity log feed */}
-              <div className="bg-zinc-900/30 border border-zinc-800/80 p-5 rounded-2xl flex flex-col justify-between space-y-4">
-                <h3 className="text-xs uppercase font-extrabold tracking-widest text-zinc-400 flex items-center gap-1.5">
-                  <Play className="w-3.5 h-3.5 text-rose-400 fill-rose-400/20" />
-                  Live Activity Feed
+              {/* Console log activity logs */}
+              <div className="glass-panel p-5 rounded-2xl flex flex-col justify-between space-y-4">
+                <h3 className="text-xs uppercase font-black tracking-widest text-zinc-400 flex items-center gap-2 font-display select-none">
+                  <Terminal className="w-4 h-4 text-rose-500" />
+                  Telemetry Log Ticker
                 </h3>
-                <div className="flex-1 overflow-y-auto max-h-[180px] space-y-2.5 pr-1 no-scrollbar">
+                <div className="flex-1 overflow-y-auto max-h-[180px] space-y-2 pr-1 no-scrollbar select-none">
                   {usersList.length > 0 ? (
                     getCompiledActivityFeed().map((feedObj, idx) => (
-                      <div key={idx} className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-900 text-[10.5px] font-mono leading-relaxed space-y-1">
-                        <div className="flex justify-between text-zinc-500 text-[9px]">
+                      <div key={idx} className="p-3 rounded-xl bg-zinc-950/80 border border-white/5 text-[10.5px] font-mono leading-relaxed space-y-1">
+                        <div className="flex justify-between text-zinc-500 text-[9px] font-bold">
                           <span>{feedObj.userName}</span>
                           <span>{feedObj.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
-                        <div>
-                          Simulated <span className={`uppercase font-bold ${
+                        <div className="font-medium text-zinc-350">
+                          Simulated <span className={`uppercase font-black ${
                             feedObj.action === "view" ? "text-blue-400" :
                             feedObj.action === "like" ? "text-rose-400" :
-                            feedObj.action === "save" ? "text-amber-400" : "text-purple-400"
-                          }`}>{feedObj.action}</span>: <span className="text-zinc-300 font-sans font-semibold">{feedObj.contentTitle}</span>
+                            feedObj.action === "save" ? "text-cyber-amber" : "text-cyber-purple"
+                          }`}>{feedObj.action}</span>: <span className="text-zinc-200 font-sans font-bold">{feedObj.contentTitle}</span>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <div className="text-center text-zinc-600 text-xs py-8">No interaction records found.</div>
+                    <div className="text-center text-zinc-600 text-xs py-8 font-semibold">No interaction records found.</div>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Daily Histogram Charts */}
+            {/* Daily stats histograms */}
             {trends && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-zinc-900/30 border border-zinc-800/80 p-5 rounded-2xl space-y-4">
-                  <h3 className="text-xs uppercase font-extrabold tracking-widest text-zinc-400">Daily Histogram Metrics</h3>
+                <div className="glass-panel p-5 rounded-2xl space-y-4">
+                  <h3 className="text-xs uppercase font-black tracking-widest text-zinc-500 font-display select-none">Daily Interaction Telemetry</h3>
                   <div>{renderBarChart(trends.daily_activities)}</div>
                 </div>
 
-                <div className="bg-zinc-900/30 border border-zinc-800/80 p-5 rounded-2xl space-y-4">
-                  <h3 className="text-xs uppercase font-extrabold tracking-widest text-zinc-400">Category Feed Popularity Shares</h3>
-                  <div className="grid grid-cols-2 gap-3.5 max-h-[160px] overflow-y-auto no-scrollbar">
+                <div className="glass-panel p-5 rounded-2xl space-y-4">
+                  <h3 className="text-xs uppercase font-black tracking-widest text-zinc-500 font-display select-none">Category Feed Popularity Shares</h3>
+                  <div className="grid grid-cols-2 gap-3 max-h-[160px] overflow-y-auto no-scrollbar">
                     {trends.category_popularity.map((catObj: any, idx: number) => {
                       const sharePct = trends.category_popularity.reduce((acc: number, c: any) => acc + c.views, 0);
                       const relativePct = sharePct > 0 ? Math.round((catObj.views / sharePct) * 100) : 0;
                       return (
-                        <div key={idx} className="p-3 bg-zinc-950/40 rounded-xl border border-zinc-900/60 flex items-center justify-between">
+                        <div key={idx} className="p-3 bg-zinc-950/40 rounded-2xl border border-white/5 flex items-center justify-between">
                           <div className="min-w-0">
-                            <span className="text-xs font-bold text-zinc-300 truncate block">{catObj.category}</span>
-                            <span className="text-[10px] text-zinc-500 font-mono mt-0.5 block">{catObj.views.toLocaleString()} views</span>
+                            <span className="text-xs font-black text-zinc-300 truncate block">{catObj.category}</span>
+                            <span className="text-[10px] text-zinc-500 font-bold font-mono mt-0.5 block">{catObj.views.toLocaleString()} views</span>
                           </div>
-                          <span className="text-base font-black text-purple-400 font-mono">{relativePct}%</span>
+                          <span className="text-base font-black text-primary font-mono">{relativePct}%</span>
                         </div>
                       );
                     })}
@@ -655,69 +615,71 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* 2. USER SIMULATOR (Audit & Math inspector) */}
+        {/* 2. USER SIMULATOR (Audit & Inspect) */}
         {mounted && activeTab === "users" && (
-          <div className="space-y-8">
-            <div>
-              <h1 className="text-xl font-extrabold tracking-tight text-zinc-100">USER ALGORITHM SIMULATOR</h1>
-              <p className="text-xs text-zinc-500 mt-0.5 font-mono uppercase tracking-wider">Inject interaction events & audit recommendation logic</p>
+          <div className="space-y-6 animate-fade-in">
+            <div className="select-none">
+              <h1 className="text-lg font-black tracking-tight text-white font-display uppercase">User Algorithm Simulator</h1>
+              <p className="text-xs text-zinc-500 mt-0.5 font-bold uppercase tracking-wider font-mono">Inject interaction events & audit recommendation logic</p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* User Selector List */}
-              <div className="bg-zinc-900/30 border border-zinc-800/80 p-5 rounded-2xl space-y-4 h-fit">
-                <h3 className="text-xs uppercase font-extrabold tracking-widest text-zinc-400">Target User Profiles</h3>
-                <div className="space-y-2.5 max-h-[480px] overflow-y-auto pr-1 no-scrollbar">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* Target User List */}
+              <div className="glass-panel p-5 rounded-2xl space-y-4 h-fit">
+                <h3 className="text-xs uppercase font-black tracking-widest text-zinc-500 font-display select-none">Simulator Target Profiles</h3>
+                <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1 no-scrollbar select-none">
                   {usersList.map((userObj) => (
                     <div 
                       key={userObj.user_id} 
                       onClick={() => handleInspectUser(userObj.user_id)}
-                      className={`p-3.5 rounded-xl border transition-all cursor-pointer flex justify-between items-center ${
+                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex justify-between items-center ${
                         selectedUserId === userObj.user_id 
-                          ? "bg-purple-950/20 border-purple-500/50 text-purple-300 shadow-[0_0_15px_rgba(139,92,246,0.15)]" 
-                          : "bg-zinc-950/40 border-zinc-900 hover:border-zinc-800 text-zinc-400"
+                          ? "bg-zinc-900 border-zinc-800 text-white" 
+                          : "bg-zinc-950/40 border-white/5 text-zinc-400 hover:border-zinc-800"
                       }`}
                     >
-                      <div>
-                        <span className="font-bold text-sm block text-zinc-200">{userObj.name}</span>
-                        <span className="text-[10px] text-zinc-500 block mt-0.5">{userObj.email}</span>
+                      <div className="min-w-0 flex-1 pr-2">
+                        <span className="font-black text-sm block text-zinc-200 truncate">{userObj.name}</span>
+                        <span className="text-[10px] text-zinc-500 block truncate font-bold mt-0.5">{userObj.email}</span>
                       </div>
-                      <div className="text-right">
-                        <span className="text-xs font-mono font-bold text-teal-400 block">{userObj.engagement_score}</span>
-                        <span className="text-[8px] uppercase tracking-widest text-zinc-500 block mt-0.5">Eng Score</span>
+                      <div className="text-right flex-shrink-0">
+                        <span className="text-xs font-mono font-black text-teal-400 block">{userObj.engagement_score}</span>
+                        <span className="text-[8px] uppercase tracking-widest text-zinc-500 block font-bold mt-0.5">Eng Score</span>
                       </div>
                     </div>
                   ))}
                   {usersList.length === 0 && (
-                    <div className="text-center text-zinc-600 text-xs py-8">No simulated users registered.</div>
+                    <div className="text-center text-zinc-600 text-xs py-8 font-semibold">No simulated users registered.</div>
                   )}
                 </div>
               </div>
 
-              {/* Selected Simulator Board */}
-              <div className="bg-zinc-900/30 border border-zinc-800/80 p-6 rounded-2xl lg:col-span-2 space-y-6">
+              {/* Inspector details panel */}
+              <div className="glass-panel p-6 rounded-2xl lg:col-span-2 space-y-6">
                 {selectedUserId && inspectionData ? (
                   <div className="space-y-6">
-                    {/* User Title Panel */}
-                    <div className="flex justify-between items-start border-b border-zinc-800/80 pb-5">
+                    
+                    {/* User Profile info */}
+                    <div className="flex justify-between items-start border-b border-white/5 pb-5 select-none">
                       <div>
-                        <h2 className="text-lg font-black text-zinc-200">{inspectionData.name}</h2>
-                        <span className="text-xs font-mono text-zinc-500">ID: {inspectionData.user_id}</span>
+                        <h2 className="text-lg font-black text-zinc-200 uppercase font-display">{inspectionData.name}</h2>
+                        <span className="text-[10px] font-mono text-zinc-500 font-bold block mt-0.5">UUID: {inspectionData.user_id}</span>
                       </div>
                       
                       <button
                         onClick={() => handleTriggerSimulatedActivity(inspectionData.user_id)}
                         disabled={simulatingEvent}
-                        className="bg-rose-700 hover:bg-rose-600 disabled:opacity-40 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-rose-900/20 active:scale-95 transition-all cursor-pointer"
+                        className="bg-primary hover:bg-primary-hover disabled:opacity-40 text-black font-black font-display px-4 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition-all cursor-pointer uppercase tracking-wider"
                       >
                         <Zap className="w-3.5 h-3.5" />
-                        {simulatingEvent ? "Simulating..." : "Trigger Simulation Event"}
+                        {simulatingEvent ? "Simulating..." : "Trigger Activity Event"}
                       </button>
                     </div>
 
                     {/* Interest DNA profile */}
-                    <div className="space-y-3 bg-zinc-950/40 p-4 rounded-xl border border-zinc-900">
-                      <h4 className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">User Interest DNA Matrix</h4>
+                    <div className="space-y-3 bg-zinc-950/40 p-4.5 rounded-2xl border border-white/5 select-none">
+                      <h4 className="text-[10px] uppercase font-black tracking-widest text-zinc-500">User Interest DNA affinity</h4>
                       <div className="space-y-2">
                         {Object.entries(inspectionData.interests).map(([cat, val]: any) => {
                           const pct = Math.round(val * 100);
@@ -727,95 +689,97 @@ export default function AdminDashboard() {
                                 <span>{cat}</span>
                                 <span className="font-mono text-teal-400">{pct}% affinity</span>
                               </div>
-                              <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                              <div className="w-full h-1.5 bg-zinc-950 rounded-full overflow-hidden border border-white/5">
                                 <div style={{ width: `${pct}%` }} className="h-full bg-teal-500 rounded-full" />
                               </div>
                             </div>
                           );
                         })}
                         {Object.keys(inspectionData.interests).length === 0 && (
-                          <span className="text-[10.5px] text-zinc-600 block py-1">No DNA data. Register interests on feed client to construct interest affinities.</span>
+                          <span className="text-[10.5px] text-zinc-650 block py-1 font-semibold">No DNA data. Register interests on feed client to construct interest affinities.</span>
                         )}
                       </div>
                     </div>
 
-                    {/* Personalization math inspect list */}
+                    {/* Personalization scored queue list */}
                     <div className="space-y-3.5">
-                      <h4 className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Scored Recommendation Candidate Queue</h4>
-                      <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
+                      <h4 className="text-[10px] uppercase font-black tracking-widest text-zinc-500 select-none">Scored Recommendation Candidate Queue</h4>
+                      <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1 no-scrollbar">
                         {inspectionData.recommendations.map((item: any, idx: number) => (
-                          <div key={item.id} className="p-3 bg-zinc-950/20 border border-zinc-900 rounded-xl flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span className="font-mono text-[10.5px] text-zinc-500 w-5 text-right font-bold">#{idx + 1}</span>
-                              <img src={item.image_url} className="w-10 h-10 object-cover rounded-lg border border-zinc-800 bg-zinc-900 flex-shrink-0" />
+                          <div key={item.id} className="p-3 bg-zinc-950/20 border border-white/5 rounded-2xl flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3.5 min-w-0">
+                              <span className="font-mono text-xs text-zinc-500 w-5 text-right font-black">#{idx + 1}</span>
+                              <img src={item.image_url} className="w-10 h-10 object-cover rounded-xl border border-white/5 bg-zinc-900 flex-shrink-0" />
                               <div className="min-w-0">
-                                <span className="font-bold text-xs text-zinc-200 block truncate max-w-[150px] sm:max-w-[260px]">{item.title}</span>
-                                <span className="text-[9.5px] font-bold text-teal-500 uppercase mt-0.5 block">{item.category}</span>
+                                <span className="font-bold text-xs text-zinc-200 block truncate max-w-[150px] sm:max-w-[240px]">{item.title}</span>
+                                <span className="text-[9px] font-black text-teal-400 uppercase mt-0.5 block">{item.category}</span>
                               </div>
                             </div>
 
-                            {/* Scoring components */}
-                            <div className="flex items-center gap-4.5 flex-shrink-0">
-                              <div className="text-right text-[10px] font-mono text-zinc-500 hidden sm:block">
-                                <div>Int Match (50%): <span className="text-zinc-300 font-bold">{item.score_breakdown.interest_match}</span></div>
-                                <div>Popularity (30%): <span className="text-zinc-300 font-bold">{item.score_breakdown.popularity}</span></div>
-                                <div>Recency (20%): <span className="text-zinc-300 font-bold">{item.score_breakdown.recency}</span></div>
+                            {/* Score parameters */}
+                            <div className="flex items-center gap-4 flex-shrink-0">
+                              <div className="text-right text-[9px] font-mono text-zinc-500 hidden sm:block font-bold">
+                                <div>DNA MATCH (50%): <span className="text-zinc-350">{item.score_breakdown.interest_match}</span></div>
+                                <div>POPULARITY (30%): <span className="text-zinc-350">{item.score_breakdown.popularity}</span></div>
+                                <div>RECENCY (20%): <span className="text-zinc-350">{item.score_breakdown.recency}</span></div>
                               </div>
-                              <div className="bg-purple-950/30 border border-purple-900/30 px-2 py-1.5 rounded-lg text-center min-w-[55px]">
-                                <span className="text-[8px] uppercase font-bold text-purple-400 block tracking-wider">Rank Score</span>
-                                <span className="text-sm font-bold font-mono text-purple-400 block mt-0.5">{item.rec_score}</span>
+                              <div className="bg-zinc-900 border border-white/5 px-2.5 py-1.5 rounded-xl text-center min-w-[58px]">
+                                <span className="text-[8px] uppercase font-black text-zinc-400 block tracking-widest">Weight</span>
+                                <span className="text-xs font-black font-mono text-primary block mt-0.5">{item.rec_score}</span>
                               </div>
                             </div>
                           </div>
                         ))}
                         {inspectionData.recommendations.length === 0 && (
-                          <div className="text-center text-zinc-600 text-xs py-8 border border-zinc-900 border-dashed rounded-xl">No recommendation candidates matching categories.</div>
+                          <div className="text-center text-zinc-600 text-xs py-8 border border-white/5 border-dashed rounded-2xl select-none font-semibold">No recommendation candidates matching categories.</div>
                         )}
                       </div>
                     </div>
+
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+                  <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 select-none">
                     <Cpu className="w-12 h-12 text-zinc-700 animate-pulse" />
                     <div>
                       <h3 className="font-bold text-zinc-400 text-sm">Simulator Registry Standby</h3>
-                      <p className="text-xs text-zinc-600 max-w-xs mt-1">Select a user profile from the left column to simulate candidate scoring algorithms and load interest DNA matrixes.</p>
+                      <p className="text-xs text-zinc-650 max-w-xs mt-1 font-semibold">Select a user profile from the left column to simulate candidate scoring algorithms and load interest DNA matrixes.</p>
                     </div>
                   </div>
                 )}
               </div>
+
             </div>
           </div>
         )}
 
-        {/* 3. CATALOG LABORATORY (Content Manager) */}
+        {/* 3. CATALOG LABORATORY */}
         {mounted && activeTab === "content" && (
-          <div className="space-y-8">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="space-y-6 animate-fade-in">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 select-none">
               <div>
-                <h1 className="text-xl font-extrabold tracking-tight text-zinc-100">CATALOG LABORATORY</h1>
-                <p className="text-xs text-zinc-500 mt-0.5 font-mono uppercase tracking-wider">Ingest and index visual assets inside feed categories</p>
+                <h1 className="text-lg font-black tracking-tight text-white font-display uppercase">Catalog Laboratory</h1>
+                <p className="text-xs text-zinc-500 mt-0.5 font-bold uppercase tracking-wider font-mono">Ingest and index visual assets inside feed categories</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <button
                   onClick={handleOpenIngestModal}
-                  className="bg-teal-700 hover:bg-teal-600 text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
+                  className="bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-primary px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer uppercase tracking-wider"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   Ingest Images
                 </button>
                 <button
                   onClick={handleOpenDriveModal}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
+                  className="bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-zinc-300 px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer uppercase tracking-wider"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" />
+                  <Database className="w-3.5 h-3.5" />
                   Drive Import
                 </button>
                 <button
                   onClick={handleOpenCreateModal}
-                  className="bg-purple-700 hover:bg-purple-600 text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
+                  className="bg-primary hover:bg-primary-hover text-black px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer uppercase tracking-wider"
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-3.5 h-3.5 text-black stroke-[3]" />
                   Add Item
                 </button>
               </div>
@@ -824,56 +788,56 @@ export default function AdminDashboard() {
             {/* Catalog search bar */}
             <div className="flex gap-4 items-center">
               <div className="relative flex-1 max-w-md">
-                <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search indexed assets..."
+                  placeholder="Search indexed catalog assets..."
                   value={contentSearchQuery}
                   onChange={(e) => setContentSearchQuery(e.target.value)}
-                  className="w-full bg-zinc-950/50 border border-zinc-900 text-zinc-300 text-xs pl-10 pr-4 py-2 rounded-xl focus:outline-none focus:border-purple-500/50 placeholder-zinc-600"
+                  className="w-full bg-zinc-900/40 border border-white/5 text-zinc-350 text-xs pl-11 pr-4 py-3 rounded-2xl focus:outline-none focus:border-zinc-700 placeholder-zinc-650 font-semibold"
                 />
               </div>
             </div>
 
-            {/* Pinterest-style dynamic card layout */}
+            {/* Masonry image catalog */}
             <div className="columns-2 md:columns-4 lg:columns-5 gap-4 space-y-4">
               {filteredContentList.map((item) => (
                 <div 
                   key={item.id}
-                  className="break-inside-avoid bg-zinc-950/60 border border-zinc-900 hover:border-zinc-800 rounded-2xl overflow-hidden group relative flex flex-col shadow-sm transition-all hover:scale-[1.01]"
+                  className="break-inside-avoid bg-zinc-950/60 border border-white/5 hover:border-zinc-800 rounded-2xl overflow-hidden group relative flex flex-col shadow-sm transition-all"
                 >
-                  <img src={item.image_url} alt={item.title} className="w-full object-cover max-h-60 bg-zinc-900" />
+                  <img src={item.image_url} alt={item.title} className="w-full object-cover max-h-56 bg-zinc-900 select-none pointer-events-none" />
                   
-                  {/* Hover stats overlays */}
-                  <div className="p-3.5 space-y-2">
+                  {/* Info block */}
+                  <div className="p-3.5 space-y-2 select-none">
                     <div className="flex gap-1.5 flex-wrap">
-                      <span className="text-[9px] uppercase font-bold text-teal-400 tracking-wider bg-teal-950/30 px-2 py-0.5 rounded border border-teal-900/30 w-fit block">{item.category}</span>
+                      <span className="text-[8.5px] uppercase font-black text-teal-400 tracking-widest bg-teal-950/20 px-2 py-0.5 rounded border border-teal-900/30 w-fit block">{item.category}</span>
                       {item.source && (
-                        <span className="text-[9px] uppercase font-bold text-zinc-400 tracking-wider bg-zinc-900/50 px-2 py-0.5 rounded border border-zinc-800 w-fit block font-mono">{item.source}</span>
+                        <span className="text-[8.5px] uppercase font-black text-zinc-500 tracking-widest bg-zinc-900/50 px-2 py-0.5 rounded border border-white/5 w-fit block font-mono">{item.source}</span>
                       )}
                     </div>
-                    <h4 className="font-bold text-xs text-zinc-200 line-clamp-2">{item.title}</h4>
+                    <h4 className="font-bold text-xs text-zinc-200 line-clamp-2 leading-relaxed">{item.title}</h4>
                     
-                    {/* Catalog counts */}
-                    <div className="flex gap-3 text-[10px] text-zinc-500 font-mono pt-1">
-                      <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> {item.views}</span>
-                      <span className="flex items-center gap-1 text-rose-500/80"><Heart className="w-3.5 h-3.5 fill-rose-950/10" /> {item.likes}</span>
-                      <span className="flex items-center gap-1 text-amber-500/80"><Bookmark className="w-3.5 h-3.5" /> {item.saves}</span>
+                    {/* Metrics */}
+                    <div className="flex gap-3 text-[9px] text-zinc-500 font-bold font-mono pt-1">
+                      <span className="flex items-center gap-1"><Eye className="w-3 h-3" /> {item.views}</span>
+                      <span className="flex items-center gap-1 text-rose-500/80"><Heart className="w-3 h-3" /> {item.likes}</span>
+                      <span className="flex items-center gap-1 text-amber-500/80"><Bookmark className="w-3 h-3" /> {item.saves}</span>
                     </div>
                   </div>
 
-                  {/* Actions overlay panel */}
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                  {/* Actions drawer */}
+                  <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10">
                     <button
                       onClick={() => handleOpenEditModal(item)}
-                      className="p-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-all cursor-pointer"
+                      className="p-2 rounded-xl bg-zinc-950 border border-white/5 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-all cursor-pointer"
                       title="Edit"
                     >
                       <Edit2 className="w-3 h-3" />
                     </button>
                     <button
                       onClick={() => handleDeleteContent(item.id)}
-                      className="p-1.5 rounded-lg bg-rose-950 border border-rose-900/30 text-rose-400 hover:text-rose-300 hover:bg-rose-950/80 transition-all cursor-pointer"
+                      className="p-2 rounded-xl bg-rose-950 border border-rose-900/30 text-rose-400 hover:text-rose-350 hover:bg-rose-900 transition-all cursor-pointer"
                       title="Delete"
                     >
                       <Trash2 className="w-3 h-3" />
@@ -882,7 +846,7 @@ export default function AdminDashboard() {
                 </div>
               ))}
               {filteredContentList.length === 0 && (
-                <div className="w-full text-center text-zinc-600 text-xs py-16 border border-zinc-900 border-dashed rounded-2xl">
+                <div className="w-full text-center text-zinc-650 text-xs py-16 border border-white/5 border-dashed rounded-3xl select-none font-bold">
                   No indexed assets match the filter constraints.
                 </div>
               )}
@@ -890,76 +854,77 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* 4. DIAGNOSTICS (Monitor metrics) */}
+        {/* 4. DIAGNOSTICS & TELEMETRY */}
         {mounted && activeTab === "monitor" && monitor && (
-          <div className="space-y-8">
-            <div>
-              <h1 className="text-xl font-extrabold tracking-tight text-zinc-100">ALGORITHM DIAGNOSTICS</h1>
-              <p className="text-xs text-zinc-500 mt-0.5 font-mono uppercase tracking-wider">Verify accuracy ratings, category densities, and server latencies</p>
+          <div className="space-y-6 animate-fade-in">
+            <div className="select-none">
+              <h1 className="text-lg font-black tracking-tight text-white font-display uppercase">Algorithm Diagnostics</h1>
+              <p className="text-xs text-zinc-500 mt-0.5 font-bold uppercase tracking-wider font-mono">Verify accuracy ratings, category densities, and server latencies</p>
             </div>
 
-            {/* Diagnostic stats */}
+            {/* Diagnostic parameters grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Accuracy */}
-              <div className="bg-zinc-900/30 border border-zinc-800/80 p-5.5 rounded-2xl flex flex-col justify-between space-y-4">
+              
+              {/* Convergence accuracy */}
+              <div className="glass-panel p-5.5 rounded-2xl flex flex-col justify-between space-y-4">
                 <div>
-                  <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest block">Recommendation Convergence Accuracy</span>
-                  <div className="flex items-baseline gap-2 mt-3.5">
-                    <h2 className="text-4xl font-black text-purple-400 font-mono tracking-tight">{monitor.accuracy}%</h2>
-                    <span className="text-[10px] text-teal-400 font-mono font-bold">+1.2% this week</span>
+                  <span className="text-[9px] uppercase font-black text-zinc-500 tracking-widest block select-none">Reco Convergence Accuracy</span>
+                  <div className="flex items-baseline gap-2 mt-3">
+                    <h2 className="text-3xl font-black text-primary font-mono tracking-tight">{monitor.accuracy}%</h2>
+                    <span className="text-[9px] text-teal-400 font-mono font-bold">+1.2% this week</span>
                   </div>
                 </div>
-                <p className="text-[10px] text-zinc-500 leading-relaxed font-sans">
-                  Represents the percentage of user interaction events (likes, saves, dwell actions) matching high-weight recommended categories.
+                <p className="text-[10px] text-zinc-400 leading-relaxed font-semibold">
+                  Represents the percentage of user interaction events matching high-weight recommended categories.
                 </p>
               </div>
 
               {/* Weekly Engagement */}
-              <div className="bg-zinc-900/30 border border-zinc-800/80 p-5.5 rounded-2xl flex flex-col justify-between space-y-4">
+              <div className="glass-panel p-5.5 rounded-2xl flex flex-col justify-between space-y-4">
                 <div>
-                  <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest block">Weekly Engagement Rate</span>
-                  <h2 className="text-4xl font-black text-purple-400 font-mono tracking-tight mt-3.5">{monitor.user_engagement_rate}%</h2>
+                  <span className="text-[9px] uppercase font-black text-zinc-500 tracking-widest block select-none">Weekly Engagement Rate</span>
+                  <h2 className="text-3xl font-black text-primary font-mono tracking-tight mt-3">{monitor.user_engagement_rate}%</h2>
                 </div>
-                <div className="space-y-1">
-                  <div className="w-full h-1.5 bg-zinc-950 rounded-full overflow-hidden border border-zinc-900">
-                    <div style={{ width: `${monitor.user_engagement_rate}%` }} className="h-full bg-purple-500 rounded-full" />
+                <div className="space-y-1.5">
+                  <div className="w-full h-1.5 bg-zinc-950 rounded-full overflow-hidden border border-white/5">
+                    <div style={{ width: `${monitor.user_engagement_rate}%` }} className="h-full bg-primary rounded-full" />
                   </div>
-                  <span className="text-[9px] text-zinc-600 block text-right font-mono">Simulating {usersList.length}/{usersList.length} active sessions</span>
+                  <span className="text-[8px] text-zinc-500 block text-right font-mono font-bold">Simulating {usersList.length}/{usersList.length} active sessions</span>
                 </div>
               </div>
 
-              {/* Latency */}
-              <div className="bg-zinc-900/30 border border-zinc-800/80 p-5.5 rounded-2xl flex flex-col justify-between space-y-4">
-                <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest block">Neural Server Latencies</span>
-                <div className="space-y-2 text-xs font-mono">
-                  <div className="flex justify-between border-b border-zinc-900 pb-1.5">
+              {/* Latency Telemetry */}
+              <div className="glass-panel p-5.5 rounded-2xl flex flex-col justify-between space-y-4">
+                <span className="text-[9px] uppercase font-black text-zinc-500 tracking-widest block select-none">Server Latencies</span>
+                <div className="space-y-2 text-xs font-mono font-bold">
+                  <div className="flex justify-between border-b border-white/5 pb-1.5">
                     <span className="text-zinc-500">Scoring Latency:</span>
-                    <span className="text-zinc-200 font-bold">{monitor.feed_performance_metrics.avg_recommendation_latency_ms} ms</span>
+                    <span className="text-zinc-200">{monitor.feed_performance_metrics.avg_recommendation_latency_ms} ms</span>
                   </div>
-                  <div className="flex justify-between border-b border-zinc-900 pb-1.5">
+                  <div className="flex justify-between border-b border-white/5 pb-1.5">
                     <span className="text-zinc-500">Cache Hit Ratio:</span>
-                    <span className="text-zinc-200 font-bold">{monitor.feed_performance_metrics.cache_hit_rate}</span>
+                    <span className="text-zinc-200">{monitor.feed_performance_metrics.cache_hit_rate}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Scoring Rate:</span>
-                    <span className="text-zinc-200 font-bold">{monitor.feed_performance_metrics.scoring_iterations_per_sec} ops/sec</span>
+                    <span className="text-zinc-200">{monitor.feed_performance_metrics.scoring_iterations_per_sec} ops/sec</span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Density distributions */}
-            <div className="bg-zinc-900/30 border border-zinc-800/80 p-6 rounded-2xl max-w-xl space-y-4.5">
-              <h3 className="text-xs uppercase font-extrabold tracking-widest text-zinc-400">System Recommendation Densities</h3>
+            <div className="glass-panel p-6 rounded-2xl max-w-xl space-y-4.5">
+              <h3 className="text-xs uppercase font-black text-zinc-500 tracking-widest font-display select-none">System Recommendation Densities</h3>
               <div className="space-y-3.5">
                 {monitor.most_recommended_categories.map((catShare: any) => (
                   <div key={catShare.category} className="space-y-1.5">
                     <div className="flex justify-between text-xs font-bold">
-                      <span className="text-zinc-300">{catShare.category}</span>
-                      <span className="text-purple-400 font-mono">{catShare.share}% share</span>
+                      <span className="text-zinc-350">{catShare.category}</span>
+                      <span className="text-primary font-mono">{catShare.share}% share</span>
                     </div>
-                    <div className="w-full h-1.5 bg-zinc-950 border border-zinc-900 rounded-full overflow-hidden">
-                      <div style={{ width: `${catShare.share}%` }} className="h-full bg-purple-500 rounded-full" />
+                    <div className="w-full h-1.5 bg-zinc-950 border border-white/5 rounded-full overflow-hidden">
+                      <div style={{ width: `${catShare.share}%` }} className="h-full bg-primary rounded-full" />
                     </div>
                   </div>
                 ))}
@@ -969,68 +934,63 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* --- ADD / EDIT CONTENT FORM DIALOG --- */}
+      {/* ─── MODALS DIALOGS ─── */}
+
+      {/* A. ADD / EDIT CATALOG ITEM FORM */}
       {showFormModal && (
-        <div className="fixed inset-0 bg-black/75 z-50 overflow-y-auto flex items-center justify-center p-4 backdrop-blur-md">
-          <div className="bg-zinc-950 border border-zinc-900 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl relative">
-            {/* Header */}
-            <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-zinc-950">
-              <h3 className="font-bold text-sm uppercase tracking-wider text-zinc-200">
+        <div className="fixed inset-0 bg-black/80 z-50 overflow-y-auto flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="glass-panel-glow w-full max-w-md rounded-3xl overflow-hidden shadow-2xl relative">
+            <div className="p-5 border-b border-white/5 flex justify-between items-center bg-zinc-950/60 backdrop-blur-md">
+              <h3 className="font-black text-sm uppercase tracking-wider text-white font-display">
                 {editingContentId ? "Edit Catalog Item" : "Create Catalog Item"}
               </h3>
-              <button 
-                onClick={() => setShowFormModal(false)}
-                className="p-1.5 rounded-full hover:bg-zinc-900 text-zinc-500 hover:text-zinc-300 cursor-pointer"
-              >
-                <X className="w-4.5 h-4.5" />
-              </button>
+              <button onClick={() => setShowFormModal(false)} className="p-1.5 rounded-full hover:bg-zinc-900 text-zinc-500 hover:text-white cursor-pointer transition-colors"><X className="w-4.5 h-4.5" /></button>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Asset Title</label>
+            <form onSubmit={handleFormSubmit} className="p-6 space-y-4 select-none">
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Asset Title</label>
                 <input
                   type="text"
                   required
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
-                  placeholder="Misty Pine Forests..."
-                  className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-purple-500/50 placeholder-zinc-700 text-zinc-300"
+                  placeholder="Asset Title..."
+                  className="w-full bg-zinc-900/40 border border-white/5 rounded-xl py-2.5 px-4 text-xs font-semibold focus:outline-none focus:border-zinc-700 placeholder-zinc-700 text-zinc-200"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Description</label>
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Description</label>
                 <textarea
                   required
                   rows={3}
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  placeholder="Describe your content item..."
-                  className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-purple-500/50 placeholder-zinc-700 text-zinc-300"
+                  placeholder="Describe your catalog item..."
+                  className="w-full bg-zinc-900/40 border border-white/5 rounded-xl py-2.5 px-4 text-xs font-semibold focus:outline-none focus:border-zinc-700 placeholder-zinc-700 text-zinc-200"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Image Asset URL</label>
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Image Asset URL</label>
                 <input
                   type="url"
                   required
                   value={formImageUrl}
                   onChange={(e) => setFormImageUrl(e.target.value)}
                   placeholder="https://images.unsplash.com/..."
-                  className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-purple-500/50 placeholder-zinc-700 text-zinc-300"
+                  className="w-full bg-zinc-900/40 border border-white/5 rounded-xl py-2.5 px-4 text-xs font-semibold focus:outline-none focus:border-zinc-700 placeholder-zinc-700 text-zinc-200"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Feed Category</label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Feed Category</label>
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value)}
-                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-purple-500/50 text-zinc-300"
+                    className="w-full bg-zinc-900 border border-white/5 rounded-xl py-2.5 px-3.5 text-xs font-semibold focus:outline-none focus:border-zinc-750 text-zinc-200"
                   >
                     {categories.map(cat => (
                       <option key={cat} value={cat} className="bg-zinc-950">{cat}</option>
@@ -1038,21 +998,21 @@ export default function AdminDashboard() {
                   </select>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Tags (comma split)</label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Tags (comma split)</label>
                   <input
                     type="text"
                     value={formTags}
                     onChange={(e) => setFormTags(e.target.value)}
-                    placeholder="green, misty, forest"
-                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-purple-500/50 placeholder-zinc-700 text-zinc-300"
+                    placeholder="green, misty"
+                    className="w-full bg-zinc-900/40 border border-white/5 rounded-xl py-2.5 px-4 text-xs font-semibold focus:outline-none focus:border-zinc-700 placeholder-zinc-700 text-zinc-200"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-purple-750 hover:bg-purple-700 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all active:scale-98 mt-2 cursor-pointer border border-purple-650"
+                className="w-full bg-primary hover:bg-primary-hover text-black font-black font-display py-3 rounded-2xl text-xs uppercase tracking-wider transition-all active:scale-[0.98] mt-2 cursor-pointer shadow-lg shadow-primary/10"
               >
                 {editingContentId ? "Update Asset" : "Commit Asset"}
               </button>
@@ -1061,67 +1021,60 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* --- INGEST IMAGES DIALOG --- */}
+      {/* B. INGEST IMAGES FORM */}
       {showIngestModal && (
-        <div className="fixed inset-0 bg-black/75 z-50 overflow-y-auto flex items-center justify-center p-4 backdrop-blur-md">
-          <div className="bg-zinc-950 border border-zinc-900 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl relative">
-            {/* Header */}
-            <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-zinc-950">
-              <h3 className="font-bold text-sm uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-teal-400" />
+        <div className="fixed inset-0 bg-black/80 z-50 overflow-y-auto flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="glass-panel-glow w-full max-w-md rounded-3xl overflow-hidden shadow-2xl relative">
+            <div className="p-5 border-b border-white/5 flex justify-between items-center bg-zinc-950/60 backdrop-blur-md">
+              <h3 className="font-black text-sm uppercase tracking-wider text-primary font-display flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-primary" />
                 Ingest Content from API
               </h3>
-              <button 
-                onClick={() => setShowIngestModal(false)}
-                className="p-1.5 rounded-full hover:bg-zinc-900 text-zinc-500 hover:text-zinc-300 cursor-pointer"
-              >
-                <X className="w-4.5 h-4.5" />
-              </button>
+              <button onClick={() => setShowIngestModal(false)} className="p-1.5 rounded-full hover:bg-zinc-900 text-zinc-500 hover:text-white cursor-pointer transition-colors"><X className="w-4.5 h-4.5" /></button>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleIngestSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleIngestSubmit} className="p-6 space-y-4 select-none">
               {ingestMessage && (
-                <div className={`p-3 rounded-lg text-xs font-semibold ${
+                <div className={`p-3 rounded-xl text-xs font-semibold ${
                   ingestMessage.includes("Successfully") 
-                    ? "bg-teal-950/40 border border-teal-900/50 text-teal-400" 
-                    : "bg-rose-950/40 border border-rose-900/50 text-rose-400"
+                    ? "bg-emerald-950/20 border border-emerald-900/40 text-emerald-400" 
+                    : "bg-rose-950/20 border border-rose-900/40 text-rose-400"
                 }`}>
                   {ingestMessage}
                 </div>
               )}
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">API Source Provider</label>
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">API Source Provider</label>
                 <select
                   value={ingestSource}
                   onChange={(e) => setIngestSource(e.target.value)}
-                  className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-500/50 text-zinc-300"
+                  className="w-full bg-zinc-900 border border-white/5 rounded-xl py-2.5 px-3.5 text-xs font-semibold focus:outline-none focus:border-zinc-750 text-zinc-200"
                 >
                   <option value="unsplash" className="bg-zinc-950">Unsplash Search API</option>
                   <option value="pexels" className="bg-zinc-950">Pexels Search API</option>
                 </select>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Keyword Search Query</label>
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Keyword Search Query</label>
                 <input
                   type="text"
                   required
                   value={ingestQuery}
                   onChange={(e) => setIngestQuery(e.target.value)}
-                  placeholder="e.g., starry sky, mechanical keyboard..."
-                  className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-500/50 placeholder-zinc-700 text-zinc-300"
+                  placeholder="e.g., Starry night, visual architecture..."
+                  className="w-full bg-zinc-900/40 border border-white/5 rounded-xl py-2.5 px-4 text-xs font-semibold focus:outline-none focus:border-zinc-700 placeholder-zinc-700 text-zinc-200"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Target Feed Category</label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Target Feed Category</label>
                   <select
                     value={ingestCategory}
                     onChange={(e) => setIngestCategory(e.target.value)}
-                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-500/50 text-zinc-300"
+                    className="w-full bg-zinc-900 border border-white/5 rounded-xl py-2.5 px-3.5 text-xs font-semibold focus:outline-none focus:border-zinc-750 text-zinc-200"
                   >
                     {categories.map(cat => (
                       <option key={cat} value={cat} className="bg-zinc-950">{cat}</option>
@@ -1129,12 +1082,12 @@ export default function AdminDashboard() {
                   </select>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Import Count</label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Import Count</label>
                   <select
                     value={ingestCount}
                     onChange={(e) => setIngestCount(Number(e.target.value))}
-                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-500/50 text-zinc-300"
+                    className="w-full bg-zinc-900 border border-white/5 rounded-xl py-2.5 px-3.5 text-xs font-semibold focus:outline-none focus:border-zinc-750 text-zinc-200"
                   >
                     <option value="5" className="bg-zinc-950">5 images</option>
                     <option value="10" className="bg-zinc-950">10 images</option>
@@ -1147,54 +1100,47 @@ export default function AdminDashboard() {
               <button
                 type="submit"
                 disabled={ingesting || !ingestQuery}
-                className="w-full bg-teal-600 hover:bg-teal-500 border border-teal-550 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all active:scale-98 mt-2 cursor-pointer"
+                className="w-full bg-primary hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed text-black font-black font-display py-3 rounded-2xl text-xs uppercase tracking-wider transition-all active:scale-[0.98] mt-2 cursor-pointer shadow-lg shadow-primary/10"
               >
-                {ingesting ? "Querying API Ingestion..." : "Start Ingestion"}
+                {ingesting ? "Querying Source..." : "Start Ingestion"}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* --- GOOGLE DRIVE IMPORT DIALOG --- */}
+      {/* C. GOOGLE DRIVE IMPORT FORM */}
       {showDriveModal && (
-        <div className="fixed inset-0 bg-black/75 z-50 overflow-y-auto flex items-center justify-center p-4 backdrop-blur-md">
-          <div className="bg-zinc-950 border border-zinc-900 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl relative">
-            {/* Header */}
-            <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-zinc-950">
-              <h3 className="font-bold text-sm uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
-                <RefreshCw className="w-4 h-4 text-teal-400 animate-spin" />
+        <div className="fixed inset-0 bg-black/80 z-50 overflow-y-auto flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="glass-panel-glow w-full max-w-md rounded-3xl overflow-hidden shadow-2xl relative">
+            <div className="p-5 border-b border-white/5 flex justify-between items-center bg-zinc-950/60 backdrop-blur-md">
+              <h3 className="font-black text-sm uppercase tracking-wider text-white font-display flex items-center gap-2">
+                <Database className="w-4 h-4 text-primary" />
                 Google Drive Ingestion
               </h3>
-              <button 
-                onClick={() => setShowDriveModal(false)}
-                className="p-1.5 rounded-full hover:bg-zinc-900 text-zinc-500 hover:text-zinc-300 cursor-pointer"
-              >
-                <X className="w-4.5 h-4.5" />
-              </button>
+              <button onClick={() => setShowDriveModal(false)} className="p-1.5 rounded-full hover:bg-zinc-900 text-zinc-500 hover:text-white cursor-pointer transition-colors"><X className="w-4.5 h-4.5" /></button>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleDriveImportSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleDriveImportSubmit} className="p-6 space-y-4 select-none">
               {driveImportMessage && (
-                <div className={`p-3 rounded-lg text-xs font-semibold ${
+                <div className={`p-3 rounded-xl text-xs font-semibold ${
                   driveImportMessage.includes("Successfully") 
-                    ? "bg-teal-950/40 border border-teal-900/50 text-teal-400" 
-                    : "bg-rose-950/40 border border-rose-900/50 text-rose-400"
+                    ? "bg-emerald-950/20 border border-emerald-900/40 text-emerald-400" 
+                    : "bg-rose-950/20 border border-rose-900/40 text-rose-400"
                 }`}>
                   {driveImportMessage}
                 </div>
               )}
 
-              {/* Import Type Tabs */}
-              <div className="grid grid-cols-2 gap-2 bg-zinc-900/50 p-1 rounded-xl border border-zinc-900">
+              {/* Drive Import tabs */}
+              <div className="grid grid-cols-2 gap-2 bg-zinc-950 p-1.5 rounded-2xl border border-white/5">
                 <button
                   type="button"
                   onClick={() => setDriveImportType("folder")}
-                  className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  className={`py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
                     driveImportType === "folder" 
-                      ? "bg-zinc-800 text-teal-400 shadow-sm" 
-                      : "text-zinc-500 hover:text-zinc-300"
+                      ? "bg-zinc-900 text-primary" 
+                      : "text-zinc-500 hover:text-zinc-350"
                   }`}
                 >
                   Folder Import
@@ -1202,10 +1148,10 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => setDriveImportType("file")}
-                  className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  className={`py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
                     driveImportType === "file" 
-                      ? "bg-zinc-800 text-teal-400 shadow-sm" 
-                      : "text-zinc-500 hover:text-zinc-300"
+                      ? "bg-zinc-900 text-primary" 
+                      : "text-zinc-500 hover:text-zinc-350"
                   }`}
                 >
                   Catalog File (CSV/JSON)
@@ -1213,56 +1159,56 @@ export default function AdminDashboard() {
               </div>
 
               {driveImportType === "folder" ? (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Google Drive Folder ID</label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Google Drive Folder ID</label>
                   <input
                     type="text"
                     required
                     value={driveFolderId}
                     onChange={(e) => setDriveFolderId(e.target.value)}
-                    placeholder="e.g., 1A2b3C4d5E6f_..."
-                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-500/50 placeholder-zinc-700 text-zinc-300"
+                    placeholder="e.g., Folder ID..."
+                    className="w-full bg-zinc-900/40 border border-white/5 rounded-xl py-2.5 px-4 text-xs font-semibold focus:outline-none focus:border-zinc-700 placeholder-zinc-700 text-zinc-200"
                   />
-                  <p className="text-[9px] text-zinc-600">Reads all images contained within the specified Google Drive folder.</p>
+                  <p className="text-[9px] text-zinc-500 leading-normal">Reads all images contained within the specified Google Drive folder.</p>
                   
-                  {/* Parent Ingestion Checkbox */}
-                  <div className="flex items-center gap-2 pt-2 select-none">
+                  {/* Parent Ingestion */}
+                  <div className="flex items-center gap-2 pt-2">
                     <input
                       type="checkbox"
                       id="is-parent-folder"
                       checked={isParentFolder}
                       onChange={(e) => setIsParentFolder(e.target.checked)}
-                      className="w-3.5 h-3.5 accent-teal-400 bg-zinc-900 rounded border-zinc-900 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                      className="w-4 h-4 accent-primary bg-zinc-900 border-white/5 rounded cursor-pointer"
                     />
-                    <label htmlFor="is-parent-folder" className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 cursor-pointer">
+                    <label htmlFor="is-parent-folder" className="text-[9.5px] font-black uppercase tracking-wider text-zinc-400 cursor-pointer">
                       Contains Category Subfolders (Parent Ingestion)
                     </label>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Google Drive File ID / Name</label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Google Drive File ID / Name</label>
                   <input
                     type="text"
                     required
                     value={driveFileId}
                     onChange={(e) => setDriveFileId(e.target.value)}
-                    placeholder="e.g., catalog_data.csv, 1g2h3i4j_..."
-                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-500/50 placeholder-zinc-700 text-zinc-300"
+                    placeholder="e.g., catalog_data.csv..."
+                    className="w-full bg-zinc-900/40 border border-white/5 rounded-xl py-2.5 px-4 text-xs font-semibold focus:outline-none focus:border-zinc-700 placeholder-zinc-700 text-zinc-200"
                   />
-                  <p className="text-[9px] text-zinc-600">Downloads a CSV or JSON catalog and parses row fields.</p>
+                  <p className="text-[9px] text-zinc-500 leading-normal">Downloads a CSV or JSON catalog and parses row fields.</p>
                 </div>
               )}
 
-              {/* Target Feed Category */}
+              {/* Feed Category parameters */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Target Feed Category</label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Target Feed Category</label>
                   <select
                     disabled={driveImportType === "folder" && isParentFolder}
                     value={driveCategory}
                     onChange={(e) => setDriveCategory(e.target.value)}
-                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-500/50 text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full bg-zinc-900 border border-white/5 rounded-xl py-2.5 px-3.5 text-xs font-semibold focus:outline-none focus:border-zinc-750 text-zinc-200 disabled:opacity-40"
                   >
                     {categories.map(cat => (
                       <option key={cat} value={cat} className="bg-zinc-950">{cat}</option>
@@ -1270,15 +1216,15 @@ export default function AdminDashboard() {
                   </select>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">
                     {driveImportType === "folder" ? "Max Folder Items" : "File Settings"}
                   </label>
                   <select
                     disabled={driveImportType !== "folder"}
                     value={driveCount}
                     onChange={(e) => setDriveCount(Number(e.target.value))}
-                    className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-500/50 text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full bg-zinc-900 border border-white/5 rounded-xl py-2.5 px-3.5 text-xs font-semibold focus:outline-none focus:border-zinc-750 text-zinc-200 disabled:opacity-40"
                   >
                     <option value="5" className="bg-zinc-950">5 items</option>
                     <option value="10" className="bg-zinc-950">10 items</option>
@@ -1288,41 +1234,41 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Credentials Header */}
-              <div className="border-t border-zinc-900 pt-3 mt-1">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 block mb-2">Google Cloud Authentication (Optional)</span>
+              {/* Google API credentials config */}
+              <div className="border-t border-white/5 pt-3.5 mt-2">
+                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block mb-2">GCP Cloud Credentials (Optional)</span>
                 
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 flex justify-between">
+                    <div className="flex justify-between text-[8px] font-black uppercase text-zinc-500 mb-1">
                       <span>Google API Key</span>
-                      <span className="text-zinc-600 font-normal normal-case">For public files/folders</span>
-                    </label>
+                      <span className="normal-case font-semibold text-zinc-650">For public files/folders</span>
+                    </div>
                     <input
                       type="password"
                       value={driveApiKey}
                       onChange={(e) => setDriveApiKey(e.target.value)}
-                      placeholder="AIzaSy..."
-                      className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-500/50 placeholder-zinc-800 text-zinc-300"
+                      placeholder="API Key..."
+                      className="w-full bg-zinc-900/40 border border-white/5 rounded-xl py-2.5 px-4 text-xs font-semibold focus:outline-none focus:border-zinc-700 placeholder-zinc-800 text-zinc-200"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 flex justify-between">
+                    <div className="flex justify-between text-[8px] font-black uppercase text-zinc-500 mb-1">
                       <span>OAuth2 Access Token</span>
-                      <span className="text-zinc-600 font-normal normal-case">For private content</span>
-                    </label>
+                      <span className="normal-case font-semibold text-zinc-650">For private content</span>
+                    </div>
                     <input
                       type="text"
                       value={driveAccessToken}
                       onChange={(e) => setDriveAccessToken(e.target.value)}
                       placeholder="ya29.a0AfH6SM..."
-                      className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-500/50 placeholder-zinc-800 text-zinc-300"
+                      className="w-full bg-zinc-900/40 border border-white/5 rounded-xl py-2.5 px-4 text-xs font-semibold focus:outline-none focus:border-zinc-700 placeholder-zinc-800 text-zinc-200"
                     />
                   </div>
                 </div>
                 
-                <p className="text-[9px] text-zinc-600 mt-2 font-mono leading-normal bg-zinc-900/30 p-2 rounded border border-zinc-900/50">
+                <p className="text-[9px] text-zinc-500 mt-3 font-mono leading-normal bg-zinc-950/40 p-2.5 rounded-xl border border-white/5">
                   💡 Leave both fields blank to run in mock sandbox mode, simulating high-quality catalog items directly.
                 </p>
               </div>
@@ -1330,9 +1276,9 @@ export default function AdminDashboard() {
               <button
                 type="submit"
                 disabled={driveImporting || (driveImportType === "folder" ? !driveFolderId.trim() : !driveFileId.trim())}
-                className="w-full bg-teal-600 hover:bg-teal-500 border border-teal-550 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all active:scale-98 mt-2 cursor-pointer"
+                className="w-full bg-primary hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed text-black font-black font-display py-3 rounded-2xl text-xs uppercase tracking-wider transition-all active:scale-[0.98] mt-2 cursor-pointer shadow-lg shadow-primary/10"
               >
-                {driveImporting ? "Processing Drive Ingestion..." : "Start Import"}
+                {driveImporting ? "Processing Drive..." : "Start Import"}
               </button>
             </form>
           </div>

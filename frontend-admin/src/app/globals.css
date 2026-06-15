@@ -1,19 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #09090b;
-  --foreground: #fafafa;
-  --card: #18181b;
-  --card-foreground: #fafafa;
-  --primary: #0d9488; /* Teal Accent for Admin */
-  --primary-foreground: #ffffff;
-  --secondary: #27272a;
-  --secondary-foreground: #fafafa;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --border: #27272a;
-  --input: #27272a;
-  --radius: 0.75rem;
+  --background: #050508;
+  --foreground: #f0f0f5;
+  --card: rgba(13, 13, 23, 0.45);
+  --card-foreground: #f0f0f5;
+  --primary: #bef200; /* Custom neon accent */
+  --primary-hover: #aedf00;
+  --secondary: #0d0d15;
+  --secondary-foreground: #f0f0f5;
+  --muted: #131322;
+  --muted-foreground: #94a3b8;
+  --border: rgba(255, 255, 255, 0.05);
+  --radius: 1rem;
 }
 
 @theme inline {
@@ -22,7 +21,7 @@
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -34,29 +33,29 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow-x: hidden;
 }
 
 /* Custom Webkit Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: #1e1e2f;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: #33334d;
 }
 
 /* Glassmorphism panel for dashboard */
 .glass-panel {
-  background: rgba(24, 24, 27, 0.65);
+  background: rgba(13, 13, 23, 0.45);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.05);

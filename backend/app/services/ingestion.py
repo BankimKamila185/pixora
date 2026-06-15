@@ -190,7 +190,7 @@ async def ingest_google_drive_folder(
     params = {
         "q": q_str,
         "pageSize": count,
-        "fields": "files(id, name, description)",
+        "fields": "files(id, name, description, thumbnailLink)",
     }
     headers = {}
     if access_token:
@@ -221,6 +221,7 @@ async def ingest_google_drive_folder(
                     "title": title[:100],
                     "description": desc,
                     "image_url": image_url,
+                    "thumbnail_url": file.get("thumbnailLink"),
                     "category": category,
                     "source": "Google Drive",
                     "tags": ["drive", "imported", category.lower()],
@@ -515,7 +516,7 @@ async def ingest_google_drive_parent_folder(
                 sub_params = {
                     "q": sub_q,
                     "pageSize": count,
-                    "fields": "files(id, name, description)",
+                    "fields": "files(id, name, description, thumbnailLink)",
                 }
                 if api_key and not access_token:
                     sub_params["key"] = api_key
@@ -536,6 +537,7 @@ async def ingest_google_drive_parent_folder(
                             "title": title[:100],
                             "description": desc,
                             "image_url": image_url,
+                            "thumbnail_url": file.get("thumbnailLink"),
                             "category": category_name,
                             "source": "Google Drive",
                             "tags": ["gdrive", "multi-category", category_name.lower()],

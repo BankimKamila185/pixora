@@ -18,6 +18,7 @@ class ContentDB(BaseModel):
     title: str
     description: str
     image_url: str
+    thumbnail_url: Optional[str] = None
     category: str
     source: str = "Pexels"
     tags: List[str] = Field(default_factory=list)
@@ -74,8 +75,9 @@ class ContentOut(BaseModel):
     title: str
     description: str
     image_url: str
+    thumbnail_url: Optional[str] = None
     category: str
-    source: str
+    source: str = "Pexels"
     tags: List[str]
     likes: int
     saves: int

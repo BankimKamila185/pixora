@@ -20,6 +20,49 @@ router = APIRouter(prefix="", tags=["content"])  # prefix is empty so path match
 async def get_categories():
     return VALID_CATEGORIES
 
+# --- Helper: Diversified Feed ---
+
+async def get_diversified_feed(content_col, skip: int = 0, limit: int = 20, seed: int = 0) -> list:
+    """
+    Returns a well-diversified feed that interleaves content from all categories
+    in a round-robin pattern. The seed ensures different order on each page load.
+    """
+    import random
+
+    all_items = await content_col.find({}).to_list(length=2000)
+    if not all_items:
+        return []
+
+    from collections import defaultdict
+    by_category = defaultdict(list)
+    for item in all_items:
+        cat = item.get("category", "Other")
+        by_category[cat].append(item)
+
+    # Sort each category bucket: highest engagement first
+    def sort_key(item):
+        return (item.get("likes", 0) * 3) + (item.get("saves", 0) * 5) + item.get("views", 0)
+
+    for cat in by_category:
+        by_category[cat].sort(key=sort_key, reverse=True)
+
+    # Shuffle category ORDER using the session seed — different seed = different variety
+    categories = list(by_category.keys())
+    rng = random.Random(seed if seed else 42)
+    rng.shuffle(categories)
+
+    # Build interleaved pool: round-robin across all categories
+    interleaved = []
+    max_rounds = max(len(v) for v in by_category.values()) if by_category else 0
+    for round_idx in range(max_rounds):
+        for cat in categories:
+            bucket = by_category[cat]
+            if round_idx < len(bucket):
+                interleaved.append(bucket[round_idx])
+
+    return interleaved[skip:skip + limit]
+
+
 # --- Core Feeds ---
 
 @router.get("/api/content", response_model=List[ContentOut], dependencies=[Depends(check_rate_limit)])
@@ -28,34 +71,29 @@ async def get_content_feed(
     category: Optional[str] = None,
     limit: int = 20,
     skip: int = 0,
+    seed: int = 0,
     current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
 ):
     content_col = get_collection("content")
     interactions_col = get_collection("interactions")
     
-    # If a specific category filter is requested, return sorted by latest
     if category:
         if category not in VALID_CATEGORIES:
             raise HTTPException(status_code=400, detail="Invalid category")
         cursor = content_col.find({"category": category}).sort("created_at", -1).skip(skip).limit(limit)
         items = await cursor.to_list(length=limit)
+    elif current_user:
+        user_id = current_user["_id"]
+        items = await get_personalized_recommendations(user_id, limit=limit, skip=skip)
     else:
-        # If logged in, get personalized recommendations
-        if current_user:
-            user_id = current_user["_id"]
-            items = await get_personalized_recommendations(user_id, limit=limit, skip=skip)
-        else:
-            # Guest feed: Default sorted by latest
-            cursor = content_col.find({}).sort("created_at", -1).skip(skip).limit(limit)
-            items = await cursor.to_list(length=limit)
+        # Guest: use diversified interleaved feed with session seed for variety on reload
+        items = await get_diversified_feed(content_col, skip=skip, limit=limit, seed=seed)
             
     # Enrich content items with liked_by_user and saved_by_user flags
     enriched_items = []
     for item in items:
-        # Cast item to dict if not already
         item_dict = dict(item)
         item_id = item_dict.get("_id") or item_dict.get("id")
-        # Standardize ID field name
         item_dict["id"] = item_id
         
         if current_user:
@@ -76,26 +114,59 @@ async def get_content_feed(
 async def get_trending_feed(
     limit: int = 20,
     skip: int = 0,
+    seed: int = 0,
     current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
 ):
     content_col = get_collection("content")
     interactions_col = get_collection("interactions")
     
-    # Sort by views, likes, saves combined popularity score
-    # Formula for ranking: (likes * 3) + (saves * 5) + views
-    # In mock db/simple mongo, we retrieve candidates and sort in memory, or query sorting
     all_content = await content_col.find({}).to_list(length=500)
+    import random
+
+    # Score each item by engagement
     for c in all_content:
         c["id"] = c.get("_id")
-        c["pop_score"] = (c.get("likes", 0) * 3) + (c.get("saves", 0) * 5) + c.get("views", 0)
-        
-    sorted_items = sorted(all_content, key=lambda x: x["pop_score"], reverse=True)
-    items = sorted_items[skip:skip+limit]
+        c["pop_score"] = (c.get("likes", 0) * 3) + (c.get("saves", 0) * 5) + \
+                         c.get("views", 0) + (c.get("shares", 0) * 2)
+
+    # Sort by score to find tier boundaries
+    sorted_all = sorted(all_content, key=lambda x: x["pop_score"], reverse=True)
+    n = len(sorted_all)
+
+    # Split into 3 tiers: top 33%, mid 33%, rest
+    t1 = sorted_all[:max(1, n // 3)]        # high engagement
+    t2 = sorted_all[n // 3: 2 * n // 3]    # mid engagement
+    t3 = sorted_all[2 * n // 3:]            # lower engagement
+
+    # Use a truly random seed per request (skip acts as changing seed since frontend passes random skip)
+    # Combine skip + seed for max variety
+    rng = random.Random(skip * 7919 + (seed if seed else random.randint(1, 99999)))
+    rng.shuffle(t1)
+    rng.shuffle(t2)
+    rng.shuffle(t3)
+
+    # Rebuild pool: mostly top tier items, with some mid for variety
+    # Ratio: ~60% top, ~30% mid, ~10% bottom
+    pool = []
+    top_count = max(1, int(limit * 0.6))
+    mid_count = max(1, int(limit * 0.3))
+    low_count = max(0, limit - top_count - mid_count)
+
+    pool.extend(t1[:top_count])
+    pool.extend(t2[:mid_count])
+    pool.extend(t3[:low_count])
+
+    # Shuffle the final pool so items from different tiers are interleaved
+    rng.shuffle(pool)
+
+    # Take the page slice
+    items = pool[:limit]
     
     enriched_items = []
     for item in items:
         item_dict = dict(item)
-        item_id = item_dict["id"]
+        item_id = item_dict.get("id") or item_dict.get("_id")
+        item_dict["id"] = item_id
         
         if current_user:
             user_id = current_user["_id"]
@@ -110,6 +181,7 @@ async def get_trending_feed(
         enriched_items.append(item_dict)
         
     return enriched_items
+
 
 @router.get("/api/content/search", response_model=List[ContentOut], dependencies=[Depends(check_rate_limit)])
 async def search_content(
@@ -521,7 +593,21 @@ async def google_drive_image_proxy(file_id: str):
     from app.config import settings
     from app.services.ingestion import get_google_access_token
     
-    # Resolve authorization
+    # Fast path: Try using the public Google Drive CDN URL (no authentication needed and very fast)
+    cdn_url = f"https://lh3.googleusercontent.com/d/{file_id}"
+    async with httpx.AsyncClient() as client:
+        try:
+            # We follow redirects and use a reasonable 10 second timeout
+            response = await client.get(cdn_url, timeout=10.0, follow_redirects=True)
+            if response.status_code == 200:
+                content_type = response.headers.get("content-type", "image/jpeg")
+                return Response(content=response.content, media_type=content_type)
+            else:
+                logger.warning(f"Fast Google Drive CDN fetch returned status {response.status_code} for {file_id}. Falling back to API...")
+        except Exception as e:
+            logger.warning(f"Fast Google Drive CDN fetch failed for {file_id}: {e}. Falling back to API...")
+
+    # Fallback path: Resolve authorization and call Google Drive API files alt=media
     access_token = await get_google_access_token()
     headers = {}
     params = {}

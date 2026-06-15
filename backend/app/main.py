@@ -4,11 +4,61 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.database import init_db
-from app.routers import auth, content, admin
+import asyncio
+from app.database import init_db, get_collection
+from app.routers import auth, content, admin, messages
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("uvicorn")
+
+async def google_drive_sync_loop():
+    await asyncio.sleep(10)  # Wait 10 seconds for initial startup
+    logger.info("Google Drive periodic sync scheduler started.")
+    while True:
+        try:
+            settings_col = get_collection("settings")
+            sync_config = await settings_col.find_one({"key": "google_drive_sync_folder_id"})
+            
+            if sync_config:
+                folder_id = sync_config.get("value")
+                is_parent = sync_config.get("is_parent", True)
+                category = sync_config.get("category") or "Nature"
+                
+                logger.info(f"Running periodic Google Drive sync for folder: {folder_id} (is_parent={is_parent})")
+                
+                from app.services.ingestion import ingest_google_drive_parent_folder, ingest_google_drive_folder
+                if is_parent:
+                    items = await ingest_google_drive_parent_folder(
+                        parent_folder_id=folder_id,
+                        count=50
+                    )
+                else:
+                    items = await ingest_google_drive_folder(
+                        folder_id=folder_id,
+                        category=category,
+                        count=50
+                    )
+                
+                if items:
+                    content_col = get_collection("content")
+                    inserted_count = 0
+                    for item in items:
+                        existing = await content_col.find_one({"image_url": item["image_url"]})
+                        if not existing:
+                            await content_col.insert_one(item)
+                            inserted_count += 1
+                    if inserted_count > 0:
+                        logger.info(f"Periodic Google Drive sync completed. Inserted {inserted_count} new items.")
+                    else:
+                        logger.info("Periodic Google Drive sync: no new items found.")
+                else:
+                    logger.info("Periodic Google Drive sync: no items found or API failed.")
+            else:
+                logger.info("No Google Drive sync folder registered yet. Import a folder in the Admin panel to start auto-sync.")
+        except Exception as e:
+            logger.error(f"Error in Google Drive periodic sync: {e}", exc_info=True)
+            
+        await asyncio.sleep(600)  # Run every 10 minutes (600 seconds)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -25,6 +75,8 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3001",
+        "http://localhost:3002",
+        "http://127.0.0.1:3002",
         "http://localhost:3005",
         "http://127.0.0.1:3005",
     ],
@@ -37,6 +89,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_db_client():
     await init_db()
+    asyncio.create_task(google_drive_sync_loop())
 
 # Security Header Middleware
 @app.middleware("http")
@@ -65,6 +118,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(auth.router)
 app.include_router(content.router)
 app.include_router(admin.router)
+app.include_router(messages.router)
 
 @app.get("/")
 async def root():

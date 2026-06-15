@@ -2,7 +2,27 @@ import uuid
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Depends, status
+import os
+import re
+from fastapi import APIRouter, HTTPException, Depends, status, Request
+
+def extract_google_id(input_str: Optional[str]) -> Optional[str]:
+    if not input_str:
+        return None
+    input_str = input_str.strip()
+    # 1. Matches folders: /folders/ID
+    folder_match = re.search(r"/folders/([a-zA-Z0-9-_]+)", input_str)
+    if folder_match:
+        return folder_match.group(1)
+    # 2. Matches files: /file/d/ID
+    file_match = re.search(r"/file/d/([a-zA-Z0-9-_]+)", input_str)
+    if file_match:
+        return file_match.group(1)
+    # 3. Matches query parameter id=ID
+    query_match = re.search(r"[?&]id=([a-zA-Z0-9-_]+)", input_str)
+    if query_match:
+        return query_match.group(1)
+    return input_str
 
 from app.database import get_collection
 from app.models import (
@@ -22,7 +42,36 @@ from app.services.ingestion import ingest_unsplash_images, ingest_pexels_images
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger("uvicorn")
-router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+async def check_admin_privilege(request: Request):
+    """
+    Enforces role-based admin validation in production environments.
+    In development mode (unauthenticated admin app), logs a warning to permit local testing.
+    """
+    auth_header = request.headers.get("Authorization")
+    if auth_header:
+        from app.routers.auth import get_current_user
+        token = auth_header.split(" ")[1] if " " in auth_header else auth_header
+        user = await get_current_user(token)
+        if user.get("role") != "admin" and user.get("email") != "admin@pixora.com":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access Denied: Admin privileges required."
+            )
+    else:
+        prod_env = os.getenv("ENV", "development").lower() == "production"
+        if prod_env:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication credentials are required in production."
+            )
+        logger.warning("Access to admin API without authorization header permitted in development mode.")
+
+router = APIRouter(
+    prefix="/api/admin", 
+    tags=["admin"], 
+    dependencies=[Depends(check_admin_privilege), Depends(check_rate_limit)]
+)
 
 class IngestionRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=100)
@@ -451,21 +500,24 @@ async def ingest_content(req: IngestionRequest):
 
 @router.post("/drive/import", response_model=List[ContentOut], dependencies=[Depends(check_rate_limit)])
 async def import_google_drive(req: DriveImportRequest):
+    folder_id = extract_google_id(req.folder_id)
+    file_id = extract_google_id(req.file_id)
+
     if not req.is_parent_folder:
         if not req.category:
             raise HTTPException(status_code=400, detail="Target category is required for single folder or file imports")
         if req.category not in VALID_CATEGORIES:
             raise HTTPException(status_code=400, detail="Invalid target category")
         
-    if not req.folder_id and not req.file_id:
+    if not folder_id and not file_id:
         raise HTTPException(status_code=400, detail="Either folder_id or file_id must be provided")
 
     items = []
-    if req.folder_id:
+    if folder_id:
         if req.is_parent_folder:
             from app.services.ingestion import ingest_google_drive_parent_folder
             items = await ingest_google_drive_parent_folder(
-                parent_folder_id=req.folder_id,
+                parent_folder_id=folder_id,
                 count=req.count,
                 api_key=req.api_key,
                 access_token=req.access_token
@@ -473,16 +525,16 @@ async def import_google_drive(req: DriveImportRequest):
         else:
             from app.services.ingestion import ingest_google_drive_folder
             items = await ingest_google_drive_folder(
-                folder_id=req.folder_id,
+                folder_id=folder_id,
                 category=req.category,
                 count=req.count,
                 api_key=req.api_key,
                 access_token=req.access_token
             )
-    elif req.file_id:
+    elif file_id:
         from app.services.ingestion import ingest_google_drive_file
         items = await ingest_google_drive_file(
-            file_id=req.file_id,
+            file_id=file_id,
             category=req.category,
             api_key=req.api_key,
             access_token=req.access_token
@@ -501,6 +553,20 @@ async def import_google_drive(req: DriveImportRequest):
             inserted_count += 1
             
     logger.info(f"Imported {inserted_count} new items from Google Drive (parent={req.is_parent_folder})")
+
+    if folder_id:
+        settings_col = get_collection("settings")
+        await settings_col.update_one(
+            {"key": "google_drive_sync_folder_id"},
+            {"$set": {
+                "value": folder_id,
+                "is_parent": req.is_parent_folder,
+                "category": req.category,
+                "updated_at": datetime.utcnow()
+            }},
+            upsert=True
+        )
+        logger.info(f"Registered Google Drive folder {folder_id} for periodic auto-sync.")
 
     # Format return list
     formatted_items = []

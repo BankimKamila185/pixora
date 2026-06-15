@@ -63,6 +63,8 @@ def main():
     # 1. Search for client_secret_*.json
     downloads_path = os.path.expanduser("~/Downloads")
     client_secrets = glob.glob(os.path.join(downloads_path, "client_secret_*.json"))
+    if client_secrets:
+        client_secrets.sort(key=os.path.getmtime, reverse=True)
     
     client_id = None
     client_secret = None
@@ -73,9 +75,9 @@ def main():
         try:
             with open(secret_file, "r") as f:
                 data = json.load(f)
-                web_cfg = data.get("web", {})
-                client_id = web_cfg.get("client_id")
-                client_secret = web_cfg.get("client_secret")
+                cfg = data.get("web") or data.get("installed") or {}
+                client_id = cfg.get("client_id")
+                client_secret = cfg.get("client_secret")
         except Exception as e:
             print(f"[ERROR] Failed to read secret file: {e}")
             

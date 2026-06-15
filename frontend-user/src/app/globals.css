@@ -1,164 +1,187 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-outfit), sans-serif;
+  
+  --color-primary: #ff007f;
+  --color-primary-hover: #e0006c;
+  
+  --color-background-obsidian: #000000;
+  --color-surface-glass: rgba(15, 15, 15, 0.65);
+  --color-border-glass: rgba(255, 255, 255, 0.08);
+  --color-text-primary: #f0f0f5;
+  --color-text-secondary: #a3a3a3;
+  --color-text-muted: #525252;
+  
+  --color-cyber-purple: #7928ca;
+  --color-cyber-pink: #ff007f;
+  --color-cyber-blue: #0070f3;
+  --color-cyber-amber: #f59e0b;
+}
+
 :root {
-  --background: #fafafa;
-  --foreground: #09090b;
-  --card: #ffffff;
-  --card-foreground: #09090b;
-  --popover: #ffffff;
-  --popover-foreground: #09090b;
-  --primary: #d97706; /* Warm Amber */
-  --primary-foreground: #ffffff;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #09090b;
-  --muted: #f4f4f5;
-  --muted-foreground: #71717a;
-  --accent: #f4f4f5;
-  --accent-foreground: #09090b;
-  --border: #e4e4e7;
-  --input: #fafafa;
-  --ring: #d97706;
-  --radius: 1.5rem; /* Smoother premium rounded corners */
+  --bg: #000000;
+  --bg-elevated: #0f0f0f;
+  --bg-hover: #1f1f1f;
+  --border: rgba(255, 255, 255, 0.08);
+  --text-primary: #f0f0f5;
+  --text-secondary: #a3a3a3;
+  --text-muted: #525252;
+  
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 24px;
+  
+  --cyber-gradient: linear-gradient(135deg, #ff007f 0%, #7928ca 50%, #0070f3 100%);
+  --sidebar-width: 260px;
+  --sidebar-collapsed: 78px;
 }
 
-.dark {
-  --background: #08080a; /* Premium Slate Black */
-  --foreground: #ffffff;
-  --card: rgba(20, 20, 25, 0.65); /* Glassmorphic Card base */
-  --card-foreground: #ffffff;
-  --popover: #0f0f13;
-  --popover-foreground: #ffffff;
-  --primary: #FFB800; /* Glowing Gold/Amber */
-  --primary-foreground: #000000;
-  --secondary: rgba(30, 30, 35, 0.7);
-  --secondary-foreground: #ffffff;
-  --muted: rgba(30, 30, 35, 0.4);
-  --muted-foreground: #9ca3af;
-  --accent: rgba(255, 255, 255, 0.05);
-  --accent-foreground: #ffffff;
-  --border: rgba(255, 255, 255, 0.07);
-  --input: #0e0e11;
-  --ring: #FFB800;
+/* ─── Base Styles ─── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  scrollbar-width: none; /* Firefox */
+}
+*::-webkit-scrollbar {
+  display: none; /* Safari and Chrome */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
-  --radius-xl: var(--radius);
+html, body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  overflow-y: scroll;
+/* ─── Premium Glassmorphism ─── */
+.glass-panel {
+  background: rgba(13, 13, 23, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* Custom Webkit Scrollbars */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 9999px;
-}
-.dark ::-webkit-scrollbar-thumb {
-  background: #262626;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #363636;
+.glass-panel-glow {
+  background: rgba(15, 15, 28, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-/* Pinterest Masonry Layout Columns */
-.masonry-grid {
-  column-count: 1;
-  column-gap: 1rem;
-  width: 100%;
+/* ─── Drifting Background Blobs ─── */
+.bg-drift-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(140px);
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 0;
 }
 
-@media (min-width: 640px) {
-  .masonry-grid {
-    column-count: 2;
-  }
+/* ─── Gradient Glow Effects ─── */
+.cyber-glow-border {
+  position: relative;
+}
+.cyber-glow-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--cyber-gradient);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
-@media (min-width: 768px) {
-  .masonry-grid {
-    column-count: 3;
-  }
+/* ─── Animations ─── */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 3s infinite ease-in-out;
 }
 
-@media (min-width: 1024px) {
-  .masonry-grid {
-    column-count: 4;
-  }
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #0d0d15 25%, #181829 50%, #0d0d15 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.8s infinite;
+  border-radius: var(--radius-sm);
 }
 
-@media (min-width: 1280px) {
-  .masonry-grid {
-    column-count: 5;
-  }
+@keyframes heart-pop {
+  0% { transform: scale(0); opacity: 0; }
+  15% { transform: scale(1.4); opacity: 1; filter: drop-shadow(0 0 10px rgba(236, 72, 153, 0.6)); }
+  30% { transform: scale(0.9); opacity: 1; }
+  80% { transform: scale(1.0); opacity: 0.8; }
+  100% { transform: scale(0.8); opacity: 0; }
+}
+.animate-heart-pop {
+  animation: heart-pop 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
-.masonry-item {
-  break-inside: avoid;
-  margin-bottom: 1rem;
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: spin 8s linear infinite;
 }
 
-/* Custom Hide Scrollbar Utility */
+/* ─── User Profile Interest DNA Matrix Indicator ─── */
+.affinity-fill {
+  background: var(--cyber-gradient);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
+}
+
+/* ─── Layout Helper Class ─── */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
-.no-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+
+/* Custom transitions */
+.smooth-hover {
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
-/* Double-Click Heart Animation */
-@keyframes heart-pop {
-  0% {
-    transform: translate(-50%, -50%) scale(0) rotate(-10deg);
-    opacity: 0;
-  }
-  15% {
-    transform: translate(-50%, -50%) scale(1.25) rotate(15deg);
-    opacity: 0.95;
-  }
-  30% {
-    transform: translate(-50%, -50%) scale(0.95) rotate(-10deg);
-    opacity: 1;
-  }
-  85% {
-    transform: translate(-50%, -50%) scale(0.95) rotate(-10deg);
-    opacity: 1;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(0) rotate(10deg);
-    opacity: 0;
-  }
+/* Inputs styling */
+.glass-input {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: #fff;
+  transition: all 0.3s ease;
+}
+.glass-input:focus {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #e60023;
+  box-shadow: 0 0 15px rgba(230, 0, 35, 0.15);
 }
 
-.animate-heart-pop {
-  animation: heart-pop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+/* Custom Masonry Column Layout */
+.pins-masonry-grid {
+  width: 100%;
 }
-
-/* Instagram gradient badge class */
-.instagram-gradient {
-  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+.pins-masonry-item {
+  break-inside: avoid;
+  margin-bottom: 12px;
+  display: inline-block;
+  width: 100%;
 }
