@@ -6,6 +6,11 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.config import settings
+try:
+    import certifi
+    _CERTIFI_CA = certifi.where()
+except ImportError:
+    _CERTIFI_CA = None
 
 logger = logging.getLogger("uvicorn")
 
@@ -286,8 +291,11 @@ async def init_db():
     if settings.MONGODB_URL:
         try:
             logger.info(f"Connecting to MongoDB at {settings.MONGODB_URL}...")
-            # Set a 3 second timeout for connection verification
-            client = AsyncIOMotorClient(settings.MONGODB_URL, serverSelectionTimeoutMS=3000)
+            # Set a 5 second timeout for connection verification
+            motor_kwargs = {"serverSelectionTimeoutMS": 5000}
+            if _CERTIFI_CA:
+                motor_kwargs["tlsCAFile"] = _CERTIFI_CA
+            client = AsyncIOMotorClient(settings.MONGODB_URL, **motor_kwargs)
             # Trigger a simple command to verify connection
             await client.admin.command('ping')
             db_client = client

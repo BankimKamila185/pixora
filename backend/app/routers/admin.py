@@ -672,3 +672,149 @@ async def import_google_drive(req: DriveImportRequest):
         formatted_items.append(item)
 
     return formatted_items
+
+
+# --- Database Seed Endpoint ---
+
+SEED_CONTENT_DATA = [
+    {"title": "Misty Pine Forests of the Pacific Northwest", "description": "A quiet morning capture of fog rolling over evergreen forests in Oregon.", "image_url": "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&auto=format&fit=crop&q=80", "category": "Nature", "tags": ["misty", "forest", "mountains", "fog"], "views": 420, "likes": 128, "saves": 94, "shares": 34},
+    {"title": "Golden Hour in Yosemite Valley", "description": "The sun setting behind El Capitan, casting a warm golden glow across the valley.", "image_url": "https://images.unsplash.com/photo-1426604966848-d7adac402bff?w=800&auto=format&fit=crop&q=80", "category": "Nature", "tags": ["yosemite", "national park", "sunset", "river"], "views": 612, "likes": 204, "saves": 115, "shares": 45},
+    {"title": "Glacial Blue Ice Caves", "description": "Stepping inside an ancient glacier cave in Iceland.", "image_url": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=800&auto=format&fit=crop&q=80", "category": "Nature", "tags": ["iceland", "glacier", "ice cave", "blue"], "views": 380, "likes": 110, "saves": 82, "shares": 19},
+    {"title": "Serene Mountain Lake Reflection", "description": "Crisp morning air and glass-like water reflecting snowcapped peaks at Moraine Lake.", "image_url": "https://images.unsplash.com/photo-1433832597046-4f10e10ac764?w=800&auto=format&fit=crop&q=80", "category": "Nature", "tags": ["moraine", "canada", "reflection", "turquoise"], "views": 530, "likes": 185, "saves": 140, "shares": 52},
+    {"title": "Autumn Pathways in Kyoto", "description": "Vibrant red and orange maple leaves over a stone pathway in Kyoto, Japan.", "image_url": "https://images.unsplash.com/photo-1501854140801-50d01698950b?w=800&auto=format&fit=crop&q=80", "category": "Nature", "tags": ["kyoto", "japan", "autumn", "foliage"], "views": 290, "likes": 95, "saves": 70, "shares": 18},
+    {"title": "Minimalist Developer Setup", "description": "An ultra-clean workspace featuring a mechanical keyboard and ultrawide monitor.", "image_url": "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&auto=format&fit=crop&q=80", "category": "Technology", "tags": ["workspace", "developer", "setup", "minimalist"], "views": 850, "likes": 320, "saves": 250, "shares": 98},
+    {"title": "Server Infrastructure Rack Detail", "description": "Deep blue LED indicators on high-performance network switchboards in a datacenter.", "image_url": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&auto=format&fit=crop&q=80", "category": "Technology", "tags": ["datacenter", "servers", "network", "cloud"], "views": 390, "likes": 105, "saves": 78, "shares": 22},
+    {"title": "Futuristic VR Interface Exploration", "description": "Engaging with advanced spatial computing user interfaces using a VR headset.", "image_url": "https://images.unsplash.com/photo-1593508512255-86ab42a8e620?w=800&auto=format&fit=crop&q=80", "category": "Technology", "tags": ["virtual reality", "vr", "future", "ar"], "views": 470, "likes": 160, "saves": 120, "shares": 50},
+    {"title": "Cyberpunk Neon City Circuit Board", "description": "Macro photography of an intricate motherboard highlighted by electric pink light leaks.", "image_url": "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80", "category": "Technology", "tags": ["cyberpunk", "motherboard", "hardware", "neon"], "views": 590, "likes": 215, "saves": 143, "shares": 64},
+    {"title": "Writing Clean Python Code", "description": "Close up shot of a coder writing Python scripts in VS Code.", "image_url": "https://images.unsplash.com/photo-1542831371-29b0f74f9713?w=800&auto=format&fit=crop&q=80", "category": "Technology", "tags": ["coding", "python", "software engineer", "vscode"], "views": 720, "likes": 270, "saves": 190, "shares": 75},
+    {"title": "Homemade Sourdough Boule", "description": "An artisanal loaf of sourdough fresh out of the oven with a blistered crust.", "image_url": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=800&auto=format&fit=crop&q=80", "category": "Recipes", "tags": ["sourdough", "baking", "bread", "artisan"], "views": 620, "likes": 240, "saves": 310, "shares": 80},
+    {"title": "Fresh Tomato & Basil Caprese Salad", "description": "A vibrant summer classic with heirloom tomatoes, mozzarella, and balsamic.", "image_url": "https://images.unsplash.com/photo-1592417817098-8f3d6eb19675?w=800&auto=format&fit=crop&q=80", "category": "Recipes", "tags": ["salad", "italian", "caprese", "healthy"], "views": 410, "likes": 130, "saves": 180, "shares": 45},
+    {"title": "Decadent Double Chocolate Brownies", "description": "Ultra fudgy brownies loaded with chocolate chunks, dusted with sea salt.", "image_url": "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=800&auto=format&fit=crop&q=80", "category": "Recipes", "tags": ["chocolate", "brownies", "dessert", "baking"], "views": 890, "likes": 390, "saves": 490, "shares": 160},
+    {"title": "Creamy Vegan Coconut Curry", "description": "An easy 30-minute yellow curry with sweet potato, chickpeas, and spinach.", "image_url": "https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?w=800&auto=format&fit=crop&q=80", "category": "Recipes", "tags": ["curry", "vegan", "coconut", "dinner"], "views": 530, "likes": 195, "saves": 280, "shares": 95},
+    {"title": "Traditional Japanese Ramen Bowl", "description": "Rich pork tonkotsu broth with noodles, chashu pork, and a soft-boiled egg.", "image_url": "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&auto=format&fit=crop&q=80", "category": "Recipes", "tags": ["ramen", "japanese", "noodles", "soup"], "views": 750, "likes": 305, "saves": 380, "shares": 110},
+    {"title": "Sunset Over Santorini Caldera", "description": "Whitewashed houses and blue-domed churches clinging to the cliffs of Oia.", "image_url": "https://images.unsplash.com/photo-1533105079780-92b9be482077?w=800&auto=format&fit=crop&q=80", "category": "Travel", "tags": ["greece", "santorini", "oia", "sunset"], "views": 940, "likes": 380, "saves": 290, "shares": 120},
+    {"title": "Turquoise Lagoons of Bora Bora", "description": "Overwater bungalows over crystal clear coral reefs in French Polynesia.", "image_url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80", "category": "Travel", "tags": ["bora bora", "tropics", "beach", "luxury"], "views": 810, "likes": 325, "saves": 240, "shares": 85},
+    {"title": "Wandering Through Petra's Siq", "description": "The dramatic sandstone canyon path leading to Al-Khazneh in Petra, Jordan.", "image_url": "https://images.unsplash.com/photo-1541432901042-2d8bd64b4a9b?w=800&auto=format&fit=crop&q=80", "category": "Travel", "tags": ["jordan", "petra", "history", "ancient"], "views": 490, "likes": 170, "saves": 130, "shares": 40},
+    {"title": "Alpine Train Ride in Switzerland", "description": "A bright red Bernina Express crossing a high stone viaduct in the Alps.", "image_url": "https://images.unsplash.com/photo-1531310197839-ccf54634509e?w=800&auto=format&fit=crop&q=80", "category": "Travel", "tags": ["switzerland", "alps", "train", "scenic"], "views": 670, "likes": 260, "saves": 210, "shares": 72},
+    {"title": "Colorful Streets of Amalfi", "description": "Boats docked in a harbor with pastel-painted buildings in Positano, Italy.", "image_url": "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=800&auto=format&fit=crop&q=80", "category": "Travel", "tags": ["amalfi", "positano", "italy", "coast"], "views": 760, "likes": 295, "saves": 235, "shares": 88},
+    {"title": "Mid-Century Modern Living Room", "description": "A stylish space featuring an Eames lounge chair and warm abstract wall art.", "image_url": "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&auto=format&fit=crop&q=80", "category": "Design", "tags": ["interior design", "mid-century", "furniture", "minimalist"], "views": 580, "likes": 210, "saves": 270, "shares": 65},
+    {"title": "Geometric Poster Graphic Layout", "description": "Swiss typography, bold circular geometries, and a vibrant primary color palette.", "image_url": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80", "category": "Design", "tags": ["graphic design", "poster", "typography", "geometry"], "views": 430, "likes": 150, "saves": 195, "shares": 54},
+    {"title": "Architectural Concrete Spirals", "description": "Looking up a winding spiral staircase of raw cast concrete in a brutalist gallery.", "image_url": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&auto=format&fit=crop&q=80", "category": "Design", "tags": ["architecture", "concrete", "staircase", "brutalist"], "views": 360, "likes": 115, "saves": 140, "shares": 28},
+    {"title": "Mobile App UI Interaction Design", "description": "Sleek UI templates highlighting neumorphism buttons and glassmorphic cards.", "image_url": "https://images.unsplash.com/photo-1541462608143-67571c6738dd?w=800&auto=format&fit=crop&q=80", "category": "Design", "tags": ["ui/ux", "product design", "app", "mobile"], "views": 690, "likes": 245, "saves": 310, "shares": 92},
+    {"title": "Moody Japandi Bedroom Design", "description": "The blend of Japanese minimalism and Scandinavian warmth in a bedroom.", "image_url": "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=800&auto=format&fit=crop&q=80", "category": "Design", "tags": ["bedroom", "japandi", "scandinavian", "plants"], "views": 490, "likes": 180, "saves": 220, "shares": 40},
+    {"title": "Neural Network Node Connections", "description": "Visualizing deep learning architecture through glowing nodes and dense synapses.", "image_url": "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=800&auto=format&fit=crop&q=80", "category": "Artificial Intelligence", "tags": ["neural networks", "machine learning", "nodes", "ai"], "views": 780, "likes": 280, "saves": 190, "shares": 80},
+    {"title": "Futuristic Cybernetic Cyborg Hand", "description": "A robotic hand interacting with a human touch, symbolizing human-AI collaboration.", "image_url": "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800&auto=format&fit=crop&q=80", "category": "Artificial Intelligence", "tags": ["robotics", "cyborg", "future", "bionic"], "views": 520, "likes": 190, "saves": 110, "shares": 45},
+    {"title": "Large Language Model Word Embeddings", "description": "A high-dimensional vector plot illustrating semantic relationships in LLM decoders.", "image_url": "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&auto=format&fit=crop&q=80", "category": "Artificial Intelligence", "tags": ["nlp", "transformers", "vectors", "embeddings"], "views": 640, "likes": 220, "saves": 165, "shares": 58},
+    {"title": "Smart City Autonomous Traffic Flow", "description": "AI systems coordinating self-driving shuttles to optimize commute times.", "image_url": "https://images.unsplash.com/photo-1508921912186-1d1a45ebb3c1?w=800&auto=format&fit=crop&q=80", "category": "Artificial Intelligence", "tags": ["smart city", "autonomous", "routing", "iot"], "views": 460, "likes": 150, "saves": 105, "shares": 33},
+    {"title": "Historic University Library Aisles", "description": "Tall wooden bookshelves stacked with vintage volumes under leaded glass windows.", "image_url": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=800&auto=format&fit=crop&q=80", "category": "Education", "tags": ["library", "books", "studying", "academia"], "views": 510, "likes": 180, "saves": 210, "shares": 48},
+    {"title": "Focused Student Homework Desk", "description": "Studying late with open textbook, highlighter pens, and a hot mug of coffee.", "image_url": "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&auto=format&fit=crop&q=80", "category": "Education", "tags": ["study", "exams", "desk", "coffee", "focus"], "views": 630, "likes": 220, "saves": 280, "shares": 52},
+    {"title": "Creative Science Experiment Beakers", "description": "Vibrant colored chemical indicators reacting in glass flasks in a research lab.", "image_url": "https://images.unsplash.com/photo-1532187863486-abf9d39d66e8?w=800&auto=format&fit=crop&q=80", "category": "Education", "tags": ["chemistry", "lab", "science", "experiment"], "views": 440, "likes": 145, "saves": 110, "shares": 24},
+    {"title": "Classic Analog SLR Camera Detail", "description": "Macro capture showing mechanical dials on a vintage 1970s film camera.", "image_url": "https://images.unsplash.com/photo-1495707902641-75cac588d2e9?w=800&auto=format&fit=crop&q=80", "category": "Photography", "tags": ["camera", "analog", "vintage", "lens"], "views": 680, "likes": 260, "saves": 220, "shares": 74},
+    {"title": "Long Exposure Neon Light Trails", "description": "Traffic trails zooming beneath towering skyscrapers in Tokyo at night.", "image_url": "https://images.unsplash.com/photo-1518005020951-eccb494ad742?w=800&auto=format&fit=crop&q=80", "category": "Photography", "tags": ["long exposure", "tokyo", "night", "neon", "traffic"], "views": 840, "likes": 340, "saves": 260, "shares": 105},
+    {"title": "Dramatic Drone View of Coastal Cliffs", "description": "Waves crashing onto black sand beaches along the south coast of Iceland.", "image_url": "https://images.unsplash.com/photo-1500964757637-c85e8a162699?w=800&auto=format&fit=crop&q=80", "category": "Photography", "tags": ["drone", "coast", "cliffs", "aerial", "ocean"], "views": 720, "likes": 290, "saves": 205, "shares": 83},
+    {"title": "Macro Water Droplet Refractions", "description": "Perfect dew droplets on a dandelion seed, reflecting a flower field background.", "image_url": "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?w=800&auto=format&fit=crop&q=80", "category": "Photography", "tags": ["macro", "water droplet", "refraction", "nature"], "views": 370, "likes": 115, "saves": 98, "shares": 19},
+    {"title": "Crisp Morning Jog on Suspension Bridge", "description": "A runner maintaining their stride across a suspension bridge in morning mist.", "image_url": "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=800&auto=format&fit=crop&q=80", "category": "Fitness", "tags": ["running", "jogging", "bridge", "morning", "cardio"], "views": 690, "likes": 230, "saves": 190, "shares": 55},
+    {"title": "Sunset Vinyasa Yoga Flow", "description": "Perfect warrior pose silhouetted against a calm beach sunset.", "image_url": "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800&auto=format&fit=crop&q=80", "category": "Fitness", "tags": ["yoga", "vinyasa", "balance", "beach", "sunset"], "views": 540, "likes": 195, "saves": 225, "shares": 68},
+    {"title": "Heavy Barbell Deadlift Effort", "description": "An athlete lifting heavy weights in a gritty warehouse gym.", "image_url": "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=800&auto=format&fit=crop&q=80", "category": "Fitness", "tags": ["powerlifting", "deadlift", "gym", "barbell"], "views": 820, "likes": 310, "saves": 180, "shares": 92},
+    {"title": "Healthy Pre-Workout Green Smoothie", "description": "Spinach, banana, chia seeds, and protein powder blended with fresh ingredients.", "image_url": "https://images.unsplash.com/photo-1553530666-ba11a7da3888?w=800&auto=format&fit=crop&q=80", "category": "Fitness", "tags": ["smoothie", "protein", "healthy", "nutrition"], "views": 470, "likes": 140, "saves": 240, "shares": 47},
+]
+
+@router.post("/seed", dependencies=[Depends(check_rate_limit)])
+async def seed_database():
+    """
+    Populate the database with curated seed content and demo users.
+    Safe to call multiple times — skips existing content by title to avoid duplicates.
+    """
+    import uuid as _uuid
+    from datetime import timedelta
+
+    content_col = get_collection("content")
+    users_col = get_collection("users")
+    interactions_col = get_collection("interactions")
+
+    now = datetime.utcnow()
+
+    # Insert seed content (skip duplicates by title)
+    inserted_content = 0
+    content_ids_by_category: Dict[str, List[str]] = {}
+
+    for i, item in enumerate(SEED_CONTENT_DATA):
+        existing = await content_col.find_one({"title": item["title"]})
+        if existing:
+            # Track ID for interaction seeding
+            cat = existing["category"]
+            content_ids_by_category.setdefault(cat, []).append(existing["_id"])
+            continue
+
+        c_id = str(_uuid.uuid4())
+        age_days = i % 10
+        created_time = now - timedelta(days=age_days, hours=age_days * 2)
+
+        doc = {
+            "_id": c_id,
+            "title": item["title"],
+            "description": item["description"],
+            "image_url": item["image_url"],
+            "category": item["category"],
+            "tags": item["tags"],
+            "likes": item["likes"],
+            "saves": item["saves"],
+            "views": item["views"],
+            "shares": item["shares"],
+            "created_at": created_time,
+        }
+        await content_col.insert_one(doc)
+        content_ids_by_category.setdefault(item["category"], []).append(c_id)
+        inserted_content += 1
+
+    # Seed demo users (skip if already exist)
+    demo_users = [
+        {"_id": "user-nature-tech", "name": "Sarah Miller", "email": "sarah@example.com", "password_hash": "$2b$12$placeholder", "interests": {"Nature": 0.55, "Technology": 0.35, "Travel": 0.10}, "followed_categories": ["Nature", "Technology", "Travel"], "created_at": now - timedelta(days=20)},
+        {"_id": "user-recipes-design", "name": "Alex Chen", "email": "alex@example.com", "password_hash": "$2b$12$placeholder", "interests": {"Recipes": 0.60, "Design": 0.30, "Photography": 0.10}, "followed_categories": ["Recipes", "Design"], "created_at": now - timedelta(days=15)},
+        {"_id": "user-fitness-ai", "name": "Emma Watson", "email": "emma@example.com", "password_hash": "$2b$12$placeholder", "interests": {"Fitness": 0.45, "Artificial Intelligence": 0.40, "Education": 0.15}, "followed_categories": ["Fitness", "Artificial Intelligence"], "created_at": now - timedelta(days=8)},
+    ]
+
+    inserted_users = 0
+    for user in demo_users:
+        existing = await users_col.find_one({"_id": user["_id"]})
+        if not existing:
+            await users_col.insert_one(user)
+            inserted_users += 1
+
+    # Seed interactions for demo users
+    import random as _random
+    actions = ["view", "like", "save"]
+    action_weights = [0.6, 0.25, 0.15]
+    inserted_interactions = 0
+
+    for user in demo_users:
+        u_id = user["_id"]
+        favs = list(user["interests"].keys())
+        matching_ids = []
+        for cat in favs:
+            matching_ids.extend(content_ids_by_category.get(cat, []))
+
+        if not matching_ids:
+            continue
+
+        for _ in range(12):
+            c_id = _random.choice(matching_ids)
+            action = _random.choices(actions, weights=action_weights, k=1)[0]
+            timestamp = now - timedelta(days=_random.randint(0, 5), hours=_random.randint(1, 23))
+            interaction = {
+                "_id": str(_uuid.uuid4()),
+                "userId": u_id,
+                "contentId": c_id,
+                "actionType": action,
+                "timestamp": timestamp,
+            }
+            await interactions_col.insert_one(interaction)
+            inserted_interactions += 1
+
+    return {
+        "message": "Database seeded successfully",
+        "inserted_content": inserted_content,
+        "inserted_users": inserted_users,
+        "inserted_interactions": inserted_interactions,
+    }
+
