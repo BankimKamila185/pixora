@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Shield, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api, getAuthToken } from "@/utils/api";
-import { auth } from "@/utils/firebase";
+import { getFirebaseAuth } from "@/utils/firebase";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 
 // ── Phone mockup image carousel (Instagram-style app previews) ──
@@ -261,13 +261,10 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      if (!auth) {
-        setShowMockModal(true);
-        setLoading(false);
-        return;
-      }
+      // getFirebaseAuth() is always safe to call in browser context
+      const firebaseAuth = getFirebaseAuth();
       const provider = new GoogleAuthProvider();
-      const res = await signInWithPopup(auth, provider);
+      const res = await signInWithPopup(firebaseAuth, provider);
       const idToken = await res.user.getIdToken();
       await api.loginWithGoogle(
         idToken,
@@ -281,8 +278,8 @@ export default function LoginPage() {
         router.push("/");
       }
     } catch (err) {
-      console.warn("Firebase Google login failed, opening simulator fallback:", err);
-      setShowMockModal(true);
+      console.warn("Firebase Google login failed:", err);
+      setError("Google sign-in failed. Please try again or use email/password.");
     } finally {
       setLoading(false);
     }

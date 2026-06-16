@@ -12,16 +12,25 @@ const firebaseConfig = {
   measurementId: "G-9K7ZNBW7J9"
 };
 
-// Initialize Firebase safely for Next.js SSR
+// Initialize Firebase app safely for Next.js SSR
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 let analytics = undefined;
-let auth = undefined;
 
 if (typeof window !== "undefined") {
-  // Analytics and Auth are only supported in browser environments
   analytics = getAnalytics(app);
-  auth = getAuth(app);
 }
 
-export { app, analytics, auth };
+/**
+ * Returns Firebase Auth instance.
+ * Always call this from browser context (client components / event handlers).
+ * Never call during SSR — use the `auth` export for that check.
+ */
+export function getFirebaseAuth() {
+  return getAuth(app);
+}
+
+// Kept for backward-compat SSR checks: `if (!auth)` in server context → shows mock
+// In browser context, prefer calling getFirebaseAuth() directly
+export { app, analytics };
+
